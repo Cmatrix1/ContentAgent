@@ -4,29 +4,41 @@ __pycache__/
 *.pyd
 *.pyo
 *.egg-info/
+*.py[cod]
+*$py.class
 
 # Logs
 *.log
 *.pot
+logs/
 
 # Virtual environment
 .env/
 venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
 # Database
 db.sqlite3
+db.sqlite3-journal
 *.sql
 *.sqlite
 *.sqlite3
 
-# Media and static files (if not managed by a separate service or CDN)
+# Media and static files
 media/
 static/
+staticfiles/
 
-# IDE specific files (e.g., PyCharm)
+# IDE specific files
 .idea/
 *.iml
+.vscode/
+*.swp
+*.swo
+*~
 
 # Operating System files
 .DS_Store
@@ -34,5 +46,14 @@ Thumbs.db
 
 # Django-specific files
 local_settings.py
-
+.env
 d.txt
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Keep example env file
+!.example.env

@@ -1,0 +1,32 @@
+# Django
+Django==5.1.2
+psycopg2-binary==2.9.9
+
+# Django REST Framework
+djangorestframework==3.14.0
+django-filter==23.5
+
+# Configuration
+python-decouple==3.8
+
+# Logging
+structlog==24.1.0
+
+# CORS Headers
+django-cors-headers==4.3.1
+
+# Static Files
+whitenoise==6.6.0
+
+# Extensions
+django-extensions==3.2.3
+
+# Development Tools
+django-debug-toolbar==4.3.0
+
+# Google Search API
+google-api-python-client==2.108.0
+
+# Production Server
+gunicorn==21.2.0
+
