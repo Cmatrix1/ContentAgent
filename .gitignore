@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / compiled files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+*.egg-info/
+
+# Logs
+*.log
+*.pot
+
+# Virtual environment
+.env/
+venv/
+env/
+
+# Database
+db.sqlite3
+*.sql
+*.sqlite
+*.sqlite3
+
+# Media and static files (if not managed by a separate service or CDN)
+media/
+static/
+
+# IDE specific files (e.g., PyCharm)
+.idea/
+*.iml
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Django-specific files
+local_settings.py
+
+d.txt
