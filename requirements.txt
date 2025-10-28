@@ -27,6 +27,16 @@ django-debug-toolbar==4.3.0
 # Google Search API
 google-api-python-client==2.108.0
 
+# Celery & Redis
+celery==5.3.4
+redis==5.0.1
+
+# HTTP Requests
+requests==2.31.0
+
+# Video Downloading
+yt-dlp==2023.11.16
+
 # Production Server
 gunicorn==21.2.0
 
