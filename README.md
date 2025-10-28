@@ -13,6 +13,7 @@ A Django-based content management system with automated video downloading from I
   - LinkedIn (via yt-dlp)
 - ✅ **Download Status Tracking**: Real-time tracking of download progress
 - ✅ **RESTful API**: Complete REST API for all operations
+- ✅ **Swagger/OpenAPI Documentation**: Interactive API documentation with Swagger UI
 - ✅ **Background Tasks**: Celery-based task queue for asynchronous processing
 - ✅ **Admin Interface**: Django admin for easy management
 
@@ -106,7 +107,16 @@ See [Quick Start Guide](docs/QUICKSTART.md) for a step-by-step tutorial.
 
 ## 📚 API Documentation
 
-See [Content API Documentation](docs/CONTENT_API.md) for complete API reference.
+### Interactive API Documentation (Swagger/OpenAPI)
+The API includes comprehensive interactive documentation:
+
+- **Swagger UI**: http://localhost:8000/api/docs/ - Interactive API testing interface
+- **ReDoc**: http://localhost:8000/api/redoc/ - Clean, readable API documentation
+- **OpenAPI Schema**: http://localhost:8000/api/schema/ - Raw OpenAPI schema
+
+📘 See [Swagger Quick Start Guide](docs/SWAGGER_QUICK_START.md) for quick reference  
+📘 See [Complete API Documentation](docs/API_DOCUMENTATION.md) for detailed information  
+📘 See [Content API Documentation](docs/CONTENT_API.md) for legacy API reference
 
 ## 🏗️ Architecture
 

@@ -17,6 +17,11 @@ from apps.content.services import create_content_from_search_result
 from apps.content.selectors import get_download_task_by_id
 from apps.search.selectors import get_project_by_id
 from apps.search.models import SearchResult
+from apps.content.schemas import (
+    content_create_schema,
+    video_download_status_schema,
+    video_download_task_detail_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,7 @@ class ContentCreateView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ContentCreateSerializer
 
+    @content_create_schema
     def post(self, request, project_id):
         project = get_project_by_id(owner_id=request.user.id, project_id=project_id)
         if not project:
@@ -90,6 +96,7 @@ class VideoDownloadStatusView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = VideoDownloadTaskSerializer
     
+    @video_download_status_schema
     def get(self, request, project_id):
         project = get_project_by_id(owner_id=request.user.id, project_id=project_id)        
         if not project:
@@ -125,6 +132,7 @@ class VideoDownloadTaskDetailView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = VideoDownloadTaskSerializer
     
+    @video_download_task_detail_schema
     def get(self, request, task_id):
         download_task = get_download_task_by_id(task_id)
 

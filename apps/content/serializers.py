@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from apps.content.models import Content, VideoDownloadTask
 
 
@@ -25,6 +26,7 @@ class ContentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'file_path']
     
+    @extend_schema_field(serializers.DictField(allow_null=True))
     def get_download_status(self, obj):
         """Get download task status if exists."""
         try:

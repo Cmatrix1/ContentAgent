@@ -16,6 +16,11 @@ from apps.search.selectors import (
     get_project_by_id,
     list_search_results_for_project,
 )
+from apps.search.schemas import (
+    project_create_schema,
+    search_request_create_schema,
+    search_result_list_schema,
+)
 
 
 class ProjectCreateView(APIView):
@@ -24,7 +29,9 @@ class ProjectCreateView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
-    serializer_class = ProjectSerializer    
+    serializer_class = ProjectSerializer
+    
+    @project_create_schema
     def post(self, request):
         """Create a new project for the authenticated user."""
         serializer = self.serializer_class(data=request.data)
@@ -46,6 +53,8 @@ class SearchRequestCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
     serializer_class = SearchRequestSerializer
+    
+    @search_request_create_schema
     def post(self, request, project_id):
         """Create a search request for the given project."""
         project = get_project_by_id(owner_id=request.user.id, project_id=project_id)
@@ -78,6 +87,8 @@ class SearchResultListView(APIView):
 
     permission_classes = [IsAuthenticated]
     serializer_class = SearchResultSerializer
+    
+    @search_result_list_schema
     def get(self, request, project_id):
         """List search results for the given project."""
         project = get_project_by_id(owner_id=request.user.id, project_id=project_id)

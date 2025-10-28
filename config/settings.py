@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     
     # Third-party apps
     'rest_framework',
+    'drf_spectacular',
     'corsheaders',
     'django_extensions',
     
@@ -172,7 +173,46 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour'
-    }
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# DRF-Spectacular Configuration
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'ContentAgent API',
+    'DESCRIPTION': 'Complete API documentation for ContentAgent - A content management and search platform',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'SECURITY': [
+        {
+            'tokenAuth': [],
+            'sessionAuth': [],
+        }
+    ],
+    'AUTHENTICATION_WHITELIST': [],
+    'APPEND_COMPONENTS': {
+        'securitySchemes': {
+            'tokenAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'Authorization',
+                'description': 'Token-based authentication with required prefix: Token <key>',
+            },
+            'sessionAuth': {
+                'type': 'apiKey',
+                'in': 'cookie',
+                'name': 'sessionid',
+                'description': 'Session-based authentication using Django session cookies',
+            }
+        }
+    },
+    'TAGS': [
+        {'name': 'Projects', 'description': 'Project management endpoints'},
+        {'name': 'Search', 'description': 'Search request and result endpoints'},
+        {'name': 'Content', 'description': 'Content management and video download endpoints'},
+    ],
 }
 
 # CORS Configuration
