@@ -32,6 +32,59 @@ def get_client():
     return genai.Client(api_key=api_key)
 
 
+def get_generation_config(response_format: str = "text") -> types.GenerateContentConfig:
+    """
+    Get generation configuration from Django settings.
+    
+    Args:
+        response_format: Either "json" for JSON responses or "text" for plain text
+    
+    Returns:
+        GenerateContentConfig instance with settings from environment
+    """
+    config_params = {
+        "temperature": settings.GEMINI_TEMPERATURE,
+        "top_p": settings.GEMINI_TOP_P,
+        "top_k": settings.GEMINI_TOP_K,
+        "max_output_tokens": settings.GEMINI_MAX_OUTPUT_TOKENS,
+    }
+    
+    if response_format == "json":
+        config_params["response_mime_type"] = "application/json"
+    
+    return types.GenerateContentConfig(**config_params)
+
+
+def call_llm(prompt: str, response_format: str = "text") -> str:
+    """
+    Make a call to the LLM with the given prompt.
+    
+    Args:
+        prompt: The prompt to send to the LLM
+        response_format: Either "json" or "text"
+    
+    Returns:
+        The LLM response text
+    
+    Raises:
+        Exception: If the LLM call fails
+    """
+    client = get_client()
+    
+    if not client:
+        raise Exception("AI client not configured. Please set GEMINI_API_KEY.")
+    
+    generation_config = get_generation_config(response_format)
+    
+    response = client.models.generate_content(
+        model=settings.GEMINI_MODEL_NAME,
+        contents=prompt,
+        config=generation_config,
+    )
+    
+    return response.text
+
+
 def generate_copywriting(inputs: dict, search_results: Optional[list] = None) -> dict:
     """
     Send structured prompt to LLM and return JSON output.
@@ -47,34 +100,10 @@ def generate_copywriting(inputs: dict, search_results: Optional[list] = None) ->
     Returns:
         Dictionary with generated copywriting sections
     """
-    client = get_client()
-    
-    # Build prompt using the prompt builder
     prompt = build_generate_copywriting_prompt(inputs, search_results)
+    result = call_llm(prompt, response_format="json").strip()
     
-    # Get model configuration from settings
-    model_name = settings.GEMINI_MODEL_NAME
-    temperature = settings.GEMINI_TEMPERATURE
-    max_tokens = settings.GEMINI_MAX_OUTPUT_TOKENS
-    top_p = settings.GEMINI_TOP_P
-    top_k = settings.GEMINI_TOP_K
-    
-    # Configure generation parameters
-    generation_config = types.GenerateContentConfig(
-        temperature=temperature,
-        top_p=top_p,
-        top_k=top_k,
-        max_output_tokens=max_tokens,
-        response_mime_type="application/json",
-    )
-    
-    response = client.models.generate_content(
-        model=model_name,
-        contents=prompt,
-        config=generation_config,
-    )
-
-    result = response.text.strip()
+    # Clean up markdown code blocks if present
     if result.startswith('```'):
         result = result.split('```')[1]
         if result.startswith('json'):
@@ -100,31 +129,10 @@ def regenerate_section(context: dict, section: str, instruction: str) -> str:
     Returns:
         New text for the section
     """
-    client = get_client()
-    
     prompt = build_regenerate_section_prompt(context, section, instruction)
     
-    model_name = settings.GEMINI_MODEL_NAME
-    temperature = settings.GEMINI_TEMPERATURE
-    max_tokens = settings.GEMINI_MAX_OUTPUT_TOKENS
-    top_p = settings.GEMINI_TOP_P
-    top_k = settings.GEMINI_TOP_K
-    
     try:
-        generation_config = types.GenerateContentConfig(
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            max_output_tokens=max_tokens,
-        )
-        
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=generation_config,
-        )
-        result = response.text
-        
+        result = call_llm(prompt, response_format="text")
         logger.info(f"Successfully regenerated section: {section}")
         return result.strip()
         
