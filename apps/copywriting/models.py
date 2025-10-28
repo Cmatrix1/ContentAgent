@@ -44,5 +44,5 @@ class CopywritingSession(models.Model):
             Dictionary with final merged outputs
         """
         final = self.outputs.copy()
-        final.update(self.edits)
+        # final.(self.edits)
         return final
