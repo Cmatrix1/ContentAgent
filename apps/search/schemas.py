@@ -16,10 +16,6 @@ from apps.search.serializers import (
 )
 
 
-
-# PROJECT ENDPOINTS SCHEMAS
-
-
 project_create_schema = extend_schema(
     operation_id='create_project',
     summary='Create a new project',
@@ -83,10 +79,6 @@ project_create_schema = extend_schema(
         ),
     ],
 )
-
-
-
-# SEARCH REQUEST ENDPOINTS SCHEMAS
 
 
 search_request_create_schema = extend_schema(
@@ -181,10 +173,6 @@ search_request_create_schema = extend_schema(
         ),
     ],
 )
-
-
-
-# SEARCH RESULTS ENDPOINTS SCHEMAS
 
 
 search_result_list_schema = extend_schema(

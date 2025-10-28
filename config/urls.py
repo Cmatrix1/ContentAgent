@@ -19,6 +19,7 @@ urlpatterns = [
     # App URLs
     path('api/', include(('apps.search.urls', 'search'), namespace='search')),
     path('api/', include(('apps.content.urls', 'content'), namespace='content')),
+    path('api/', include(('apps.copywriting.urls', 'copywriting'), namespace='copywriting')),
 ]
 
 if settings.DEBUG:

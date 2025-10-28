@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'apps.search',
     'apps.publication',
     'apps.content',
+    'apps.copywriting',
 ]
 
 # Debug toolbar (only in development)
@@ -212,6 +213,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Projects', 'description': 'Project management endpoints'},
         {'name': 'Search', 'description': 'Search request and result endpoints'},
         {'name': 'Content', 'description': 'Content management and video download endpoints'},
+        {'name': 'Copywriting', 'description': 'AI-powered copywriting generation endpoints'},
     ],
 }
 
@@ -378,6 +380,9 @@ if not GOOGLE_API_KEYS:
     single_key = config('GOOGLE_API_KEY', default='')
     GOOGLE_API_KEYS = [single_key] if single_key else []
 GOOGLE_SEARCH_ENGINE_ID = config('GOOGLE_SEARCH_ENGINE_ID', default='')
+
+# Gemini API Configuration (for AI Copywriting)
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 
 
 

@@ -38,6 +38,11 @@ requests==2.31.0
 # Video Downloading
 yt-dlp==2023.11.16
 
+# AI/LLM - LangChain
+langchain==0.1.20
+langchain-core==0.1.52
+langchain-google-genai==1.0.3
+
 # Production Server
 gunicorn==21.2.0
 
