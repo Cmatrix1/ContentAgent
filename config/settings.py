@@ -383,6 +383,11 @@ GOOGLE_SEARCH_ENGINE_ID = config('GOOGLE_SEARCH_ENGINE_ID', default='')
 
 # Gemini API Configuration (for AI Copywriting)
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+GEMINI_MODEL_NAME = config('GEMINI_MODEL_NAME', default='gemini-2.0-flash')
+GEMINI_TEMPERATURE = config('GEMINI_TEMPERATURE', default=0.7, cast=float)
+GEMINI_MAX_OUTPUT_TOKENS = config('GEMINI_MAX_OUTPUT_TOKENS', default=8192, cast=int)
+GEMINI_TOP_P = config('GEMINI_TOP_P', default=0.95, cast=float)
+GEMINI_TOP_K = config('GEMINI_TOP_K', default=40, cast=int)
 
 
 

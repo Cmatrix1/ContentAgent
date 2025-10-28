@@ -9,6 +9,7 @@ from django.db import transaction
 from apps.copywriting.models import CopywritingSession
 from apps.copywriting.services.ai_client import generate_copywriting, regenerate_section
 from apps.search.models import Project
+from apps.search.selectors import list_search_results_for_project
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,19 @@ def create_copywriting_session(
         inputs['source_url'] = content.source_url
         inputs['content_type'] = content.content_type
     
-    # Generate copywriting using AI
-    outputs = generate_copywriting(inputs)
+    selected_results = list_search_results_for_project(project, only_selected=True)
+    search_results_data = []
+    for result in selected_results:
+        search_results_data.append({
+            'title': result.title,
+            'snippet': result.snippet,
+            'link': result.link,
+        })
     
-    # Create session
+    logger.info(f"Found {len(search_results_data)} selected search results for project {project.id}")
+    
+    outputs = generate_copywriting(inputs, search_results=search_results_data if search_results_data else None)
+    
     session = CopywritingSession.objects.create(
         project=project,
         inputs=inputs,

@@ -3,11 +3,16 @@ AI client for generating copywriting using Google Generative AI.
 """
 import json
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from django.conf import settings
 from google import genai
 from google.genai import types
+
+from apps.copywriting.services.prompts import (
+    build_generate_copywriting_prompt,
+    build_regenerate_section_prompt,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +32,7 @@ def get_client():
     return genai.Client(api_key=api_key)
 
 
-def generate_copywriting(inputs: dict) -> dict:
+def generate_copywriting(inputs: dict, search_results: Optional[list] = None) -> dict:
     """
     Send structured prompt to LLM and return JSON output.
     
@@ -37,40 +42,36 @@ def generate_copywriting(inputs: dict) -> dict:
             - description: Project description
             - platform: Target platform
             - user_description: Optional user note
+        search_results: Optional list of selected search results with title and snippet
     
     Returns:
         Dictionary with generated copywriting sections
     """
     client = get_client()
     
-    user_note = ""
-    if inputs.get('user_description'):
-        user_note = f"- User Note: {inputs['user_description']}"
+    # Build prompt using the prompt builder
+    prompt = build_generate_copywriting_prompt(inputs, search_results)
     
-    prompt = f"""You are an expert copywriter specialized in SEO and social media. You write engaging, persuasive content in Persian.
-
-Project Information:
-- Title: {inputs.get('title', 'Untitled')}
-- Description: {inputs.get('description', '')}
-- Platform: {inputs.get('platform', 'other')}
-{user_note}
-
-Generate marketing texts in Persian for this content in JSON format with the following structure:
-{{
-  "title": "engaging title",
-  "caption": "detailed caption for social media",
-  "micro_caption": "short version of caption",
-  "meta_description": "SEO-optimized meta description",
-  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
-  "cta": "call to action text",
-  "alt_text": "alternative text for accessibility"
-}}
-
-Return ONLY the JSON, no additional text."""
+    # Get model configuration from settings
+    model_name = settings.GEMINI_MODEL_NAME
+    temperature = settings.GEMINI_TEMPERATURE
+    max_tokens = settings.GEMINI_MAX_OUTPUT_TOKENS
+    top_p = settings.GEMINI_TOP_P
+    top_k = settings.GEMINI_TOP_K
+    
+    # Configure generation parameters
+    generation_config = types.GenerateContentConfig(
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        max_output_tokens=max_tokens,
+        response_mime_type="application/json",
+    )
     
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model=model_name,
         contents=prompt,
+        config=generation_config,
     )
 
     result = response.text.strip()
@@ -101,22 +102,26 @@ def regenerate_section(context: dict, section: str, instruction: str) -> str:
     """
     client = get_client()
     
-    prompt = f"""You are rewriting one section of a marketing copy in Persian. Follow the user's instructions precisely.
-
-Existing section ({section}): {context.get('old_value', '')}
-
-Goal: {instruction}
-
-Project Context:
-- Title: {context.get('title', 'Untitled')}
-- Description: {context.get('description', '')}
-
-Return only the new text for this section in Persian. Do not include any explanations or additional text."""
+    prompt = build_regenerate_section_prompt(context, section, instruction)
+    
+    model_name = settings.GEMINI_MODEL_NAME
+    temperature = settings.GEMINI_TEMPERATURE
+    max_tokens = settings.GEMINI_MAX_OUTPUT_TOKENS
+    top_p = settings.GEMINI_TOP_P
+    top_k = settings.GEMINI_TOP_K
     
     try:
+        generation_config = types.GenerateContentConfig(
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            max_output_tokens=max_tokens,
+        )
+        
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=model_name,
             contents=prompt,
+            config=generation_config,
         )
         result = response.text
         

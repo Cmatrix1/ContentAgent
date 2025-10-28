@@ -52,21 +52,14 @@ class CopywritingGenerateView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-        user_description = serializer.validated_data.get('description', '')
-        
-        try:
-            session = create_copywriting_session(
-                project=project,
-                user_description=user_description,
-            )
-            response_serializer = CopywritingSessionSerializer(session)
-            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            logger.error(f"Error generating copywriting: {e}")
-            return Response(
-                {"error": f"Failed to generate copywriting: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        user_description = serializer.validated_data.get('description', '')        
+        session = create_copywriting_session(
+            project=project,
+            user_description=user_description,
+        )
+        response_serializer = CopywritingSessionSerializer(session)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
 
 
 class CopywritingSessionDetailView(APIView):
@@ -130,26 +123,20 @@ class CopywritingEditSectionView(APIView):
         section = serializer.validated_data['section']
         new_value = serializer.validated_data['new_value']
         
-        try:
-            update_session_edit(
-                session=session,
-                section=section,
-                new_value=new_value,
-            )
-            return Response(
-                {
-                    "message": f'Section "{section}" updated successfully.',
-                    "section": section,
-                    "new_value": new_value,
-                },
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
-            logger.error(f"Error editing section: {e}")
-            return Response(
-                {"error": f"Failed to edit section: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        update_session_edit(
+            session=session,
+            section=section,
+            new_value=new_value,
+        )
+        return Response(
+            {
+                "message": f'Section "{section}" updated successfully.',
+                "section": section,
+                "new_value": new_value,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 
 class CopywritingRegenerateSectionView(APIView):
@@ -184,26 +171,20 @@ class CopywritingRegenerateSectionView(APIView):
         section = serializer.validated_data['section']
         instruction = serializer.validated_data['instruction']
         
-        try:
-            _, new_value = regenerate_session_section(
-                session=session,
-                section=section,
-                instruction=instruction,
-            )
-            return Response(
-                {
-                    "message": f'Section "{section}" regenerated successfully.',
-                    "section": section,
-                    "new_value": new_value,
-                },
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
-            logger.error(f"Error regenerating section: {e}")
-            return Response(
-                {"error": f"Failed to regenerate section: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        _, new_value = regenerate_session_section(
+            session=session,
+            section=section,
+            instruction=instruction,
+        )
+        return Response(
+            {
+                "message": f'Section "{section}" regenerated successfully.',
+                "section": section,
+                "new_value": new_value,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 
 class CopywritingSaveFinalView(APIView):
@@ -231,19 +212,12 @@ class CopywritingSaveFinalView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         
-        try:
-            final_outputs = finalize_session(session=session)
-            return Response(
-                {
-                    "message": "Copywriting saved successfully.",
-                    "status": "completed",
-                    "final_outputs": final_outputs,
-                },
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
-            logger.error(f"Error saving final copywriting: {e}")
-            return Response(
-                {"error": f"Failed to save copywriting: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        final_outputs = finalize_session(session=session)
+        return Response(
+            {
+                "message": "Copywriting saved successfully.",
+                "status": "completed",
+                "final_outputs": final_outputs,
+            },
+            status=status.HTTP_200_OK,
+        )
