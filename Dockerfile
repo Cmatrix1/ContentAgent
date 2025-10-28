@@ -30,18 +30,11 @@ RUN pip install --upgrade pip && \
 # Copy project files
 COPY . .
 
-# Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 # Create logs directory
 RUN mkdir -p logs
 
 # Expose port
 EXPOSE 8000
-
-# Set entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
 
 # Run gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "config.wsgi:application"]

@@ -57,3 +57,4 @@ htmlcov/
 
 # Keep example env file
 !.example.env
+server.txt
