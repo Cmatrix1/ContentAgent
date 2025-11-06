@@ -58,6 +58,11 @@ def create_copywriting_session(
     
     outputs = generate_copywriting(inputs, search_results=search_results_data if search_results_data else None)
     
+    # Ensure outputs is a dict before storing
+    if not isinstance(outputs, dict):
+        logger.error(f"Invalid outputs type: {type(outputs)}. Using empty dict.")
+        outputs = {}
+    
     session = CopywritingSession.objects.create(
         project=project,
         inputs=inputs,

@@ -52,7 +52,7 @@ Generate marketing texts in Persian for this content in JSON format with the fol
   "alt_text": "alternative text for accessibility"
 }}
 
-Return ONLY the JSON, no additional text."""
+IMPORTANT: Return ONLY a single JSON object (not an array). Do not wrap the response in square brackets. No additional text or explanations."""
     
     return prompt
 

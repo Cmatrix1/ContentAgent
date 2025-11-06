@@ -110,6 +110,17 @@ def generate_copywriting(inputs: dict, search_results: Optional[list] = None) ->
             result = result[4:]
     
     outputs = json.loads(result)
+    
+    if isinstance(outputs, list):
+        logger.error(f"LLM returned a list instead of dict. Converting to dict format.")
+        if outputs and isinstance(outputs[0], dict):
+            outputs = outputs[0]
+        else:
+            raise ValueError("LLM returned a list but expected a dictionary with copywriting sections")
+    
+    if not isinstance(outputs, dict):
+        raise ValueError(f"LLM returned invalid type: {type(outputs)}. Expected dictionary.")
+    
     logger.info(f"Successfully generated copywriting for {inputs.get('title')}")
     return outputs
 

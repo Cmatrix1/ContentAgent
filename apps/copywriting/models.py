@@ -43,6 +43,13 @@ class CopywritingSession(models.Model):
         Returns:
             Dictionary with final merged outputs
         """
-        final = self.outputs.copy()
-        # final.(self.edits)
+        if isinstance(self.outputs, list):
+            outputs = self.outputs[0] if self.outputs and isinstance(self.outputs[0], dict) else {}
+        else:
+            outputs = self.outputs if isinstance(self.outputs, dict) else {}
+        
+        edits = self.edits if isinstance(self.edits, dict) else {}
+        
+        final = outputs.copy()
+        final.update(edits)
         return final
