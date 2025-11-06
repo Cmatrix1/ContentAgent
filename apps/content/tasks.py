@@ -1,16 +1,20 @@
 
 import os
+import time
 import logging
 import requests
 import subprocess
 from celery import shared_task
 from django.conf import settings
-from apps.content.models import VideoDownloadTask
+from google import genai
+from google.genai import types
+from apps.content.models import VideoDownloadTask, Subtitle
 from apps.content.services import (
     update_download_task_status,
     update_content_file_path,
+    update_subtitle_status,
 )
-from apps.content.selectors import get_download_task_by_id
+from apps.content.selectors import get_download_task_by_id, get_subtitle_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +307,240 @@ def download_video_task(self, task_id: str):
             return {
                 'status': 'error',
                 'task_id': task_id,
+                'message': str(e)
+            }
+
+
+SRT_PROMPT = """
+🎯 **OBJECTIVE**
+Generate professional-quality subtitles for this video in **SRT format**.  
+The subtitles must be accurate, natural, easy to read, and perfectly formatted — ready to use in any video player.
+
+---
+
+### 🧠 ROLE
+You are a professional subtitle creator.  
+Your job is to create subtitles that feel human-made — with clear language, natural rhythm, and valid SRT formatting.
+
+---
+
+### ⚙️ CORE REQUIREMENTS
+
+#### 1. Language
+- Automatically detect the spoken language.  
+- Transcribe in that same language (no translation).  
+- If multiple languages are spoken, keep each phrase in its original language.
+
+#### 2. Subtitle Readability
+- Make subtitles **short, natural, and easy to read**.  
+- Each subtitle block should be **4–10 words** (ideally one full thought per line).  
+- Split long sentences naturally at pauses or commas.  
+- Avoid running multiple sentences in a single subtitle.  
+- Each block should be **1–2 short lines max**.  
+- Remove unnecessary fillers (“uh”, “um”) unless they carry meaning.  
+- Maintain punctuation and capitalization for clarity.
+
+#### 3. Timing Precision
+- Each subtitle should last **1–4 seconds** (never longer than 6 seconds).  
+- Sync timestamps naturally to speech rhythm.  
+- Overlapping timestamps are not allowed.
+
+#### 4. Timestamp Format
+Use the exact structure:
+```
+
+HH:MM:SS,mmm --> HH:MM:SS,mmm
+
+```
+Rules:
+- Always use commas `,` before milliseconds (not dots).  
+- Milliseconds must have **3 digits**.  
+- Always **two digits** for hours, minutes, and seconds.  
+- Example:
+  ✅ `00:00:00,000 --> 00:00:03,200`  
+  ✅ `00:01:12,560 --> 00:01:16,910`
+
+#### 5. SRT Structure
+Every subtitle block must strictly follow this format:
+```
+
+1
+00:00:00,000 --> 00:00:03,200
+Subtitle text here.
+
+2
+00:00:03,200 --> 00:00:06,800
+Next subtitle line.
+
+```
+
+Rules:
+- Each block has:
+  1. A sequential index (starting at 1)  
+  2. A timestamp line  
+  3. One or two short text lines  
+  4. A blank line after each block  
+- Text must always appear **below** the timestamp line (never on the same line).  
+- Do **not** include explanations, notes, or metadata.
+
+#### 6. Output Format
+- Return **only valid, clean `.srt` text** — ready to save directly.  
+- No markdown, code fences, or additional commentary.  
+- Ensure line breaks and numbering are clean and consistent.  
+- Validate that timestamps are in chronological order and properly aligned.
+
+---
+
+### ✅ EXAMPLE OUTPUT
+
+```
+
+1
+00:00:00,000 --> 00:00:02,600
+Hey everyone, welcome back!
+
+2
+00:00:02,600 --> 00:00:05,300
+Today I’ll show you how to use ChatGPT.
+
+3
+00:00:05,300 --> 00:00:07,900
+Let’s get started.
+
+```
+
+---
+
+### 🧩 FINAL REMINDERS
+- Subtitles must look **professional, concise, and human-timed**.  
+- **Never attach text to timestamps** (like `01:34:600And`).  
+- **Always** use commas in timestamps.  
+- **Keep subtitles short, natural, and perfectly formatted.**  
+- Output must be **only valid `.srt` text**, nothing else.
+"""
+
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def generate_subtitle_task(self, subtitle_id: str):
+    """
+    Celery task to generate subtitles for a video.
+    
+    Args:
+        subtitle_id: UUID of the Subtitle
+    
+    Returns:
+        Dictionary with result information
+    """
+    logger.info(f"Starting subtitle generation task {subtitle_id}")
+    
+    try:
+        subtitle = get_subtitle_by_id(subtitle_id)
+        
+        if not subtitle:
+            logger.error(f"Subtitle {subtitle_id} not found")
+            return {'status': 'error', 'message': 'Subtitle not found'}
+        
+        update_subtitle_status(
+            subtitle_id=subtitle_id,
+            status='generating'
+        )
+        
+        content = subtitle.content
+        platform = content.platform
+        video_url = content.source_url
+        
+        logger.info(f"Generating subtitle for {platform} video: {video_url}")
+        
+        
+        api_key = settings.GEMINI_API_KEY
+        
+        if not api_key:
+            raise Exception("GEMINI_API_KEY not configured in settings")
+        
+        client = genai.Client(api_key=api_key)
+        
+        if platform in ['instagram', 'linkedin']:
+            if not content.file_path:
+                raise Exception(f"Video file not downloaded for {platform}. Cannot generate subtitles without downloaded video file.")
+            
+            video_file_path = os.path.join(settings.MEDIA_ROOT, content.file_path)
+            
+            if not os.path.exists(video_file_path):
+                raise Exception(f"Video file not found at path: {video_file_path}")
+            
+            logger.info(f"Uploading {platform} video to Gemini: {video_file_path}")
+            
+            myfile = client.files.upload(file=video_file_path)
+            logger.info(f"File uploaded - Waiting for processing... (File ID: {myfile.name})")
+            
+            while myfile.state.name == "PROCESSING":
+                logger.info("File still processing...")
+                time.sleep(2)
+                myfile = client.files.get(name=myfile.name)
+            
+            if myfile.state.name == "FAILED":
+                raise ValueError(f"File processing failed: {myfile.state}")
+            
+            logger.info(f"File is ACTIVE - Generating subtitles for {platform} video")
+            
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[myfile, SRT_PROMPT]
+            )
+            
+            subtitle_text = response.text
+        
+        elif platform == 'youtube':
+            logger.info(f"Calling Gemini API for YouTube video: {video_url}")
+            
+            response = client.models.generate_content(
+                model='models/gemini-2.5-flash',
+                contents=types.Content(
+                    parts=[
+                        types.Part(
+                            file_data=types.FileData(file_uri=video_url)
+                        ),
+                        types.Part(text=SRT_PROMPT)
+                    ]
+                )
+            )
+            
+            subtitle_text = response.text
+        
+        else:
+            raise Exception(f"Unsupported platform: {platform}")
+        
+        subtitle_text.strip('```srt')
+        update_subtitle_status(
+            subtitle_id=subtitle_id,
+            status='completed',
+            subtitle_text=subtitle_text
+        )
+        
+        logger.info(f"Subtitle generation task {subtitle_id} completed successfully")
+        
+        return {
+            'status': 'success',
+            'subtitle_id': subtitle_id,
+        }
+    
+    except Exception as e:
+        logger.error(f"Subtitle generation task {subtitle_id} failed: {str(e)}", exc_info=True)
+        
+        update_subtitle_status(
+            subtitle_id=subtitle_id,
+            status='failed',
+            error_message=str(e)
+        )
+        
+        try:
+            raise self.retry(exc=e)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for subtitle task {subtitle_id}")
+            return {
+                'status': 'error',
+                'subtitle_id': subtitle_id,
                 'message': str(e)
             }
 

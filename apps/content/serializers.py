@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
-from apps.content.models import Content, VideoDownloadTask
+from apps.content.models import Content, VideoDownloadTask, Subtitle
 
 
 class ContentSerializer(serializers.ModelSerializer):
@@ -81,6 +81,44 @@ class VideoDownloadTaskSerializer(serializers.ModelSerializer):
             'error_message',
             'download_url',
             'file_size',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+        ]
+
+
+class SubtitleSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Subtitle model.
+    """
+    content_url = serializers.URLField(source='content.source_url', read_only=True)
+    platform = serializers.CharField(source='content.platform', read_only=True)
+    project_title = serializers.CharField(source='content.project.title', read_only=True)
+    
+    class Meta:
+        model = Subtitle
+        fields = [
+            'id',
+            'content',
+            'content_url',
+            'platform',
+            'project_title',
+            'task_id',
+            'status',
+            'subtitle_text',
+            'error_message',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'task_id',
+            'status',
+            'subtitle_text',
+            'error_message',
             'started_at',
             'completed_at',
             'created_at',

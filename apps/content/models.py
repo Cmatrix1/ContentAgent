@@ -90,3 +90,39 @@ class VideoDownloadTask(models.Model):
     def __str__(self):
         return f"Download Task {self.id} - {self.status}"
 
+
+class Subtitle(models.Model):
+    """
+    Model to store subtitles for video content.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('generating', 'Generating'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    content = models.OneToOneField(
+        Content,
+        on_delete=models.CASCADE,
+        related_name='subtitle'
+    )
+    task_id = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    subtitle_text = models.TextField(blank=True, null=True)
+    error_message = models.TextField(blank=True, null=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Subtitle {self.id} - {self.status}"

@@ -9,6 +9,7 @@ from apps.content.serializers import (
     ContentSerializer,
     ContentCreateSerializer,
     VideoDownloadTaskSerializer,
+    SubtitleSerializer,
 )
 
 
@@ -345,3 +346,282 @@ video_download_task_detail_schema = extend_schema(
     },
 )
 
+
+content_delete_schema = extend_schema(
+    operation_id='delete_content',
+    summary='Delete content for a project',
+    description=(
+        'Deletes the content associated with a specific project. '
+        'This will also delete any associated video download tasks. '
+        'Access is restricted to the owner of the project.'
+    ),
+    tags=['Content'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project whose content to delete',
+            required=True,
+        ),
+    ],
+    responses={
+        204: OpenApiResponse(
+            description='Content deleted successfully',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        404: OpenApiResponse(
+            description='Project or content not found',
+            examples=[
+                OpenApiExample(
+                    'Project Not Found',
+                    value={
+                        'error': 'Project not found or access denied.',
+                    },
+                ),
+                OpenApiExample(
+                    'Content Not Found',
+                    value={
+                        'error': 'No content found for this project.',
+                    },
+                ),
+            ],
+        ),
+    },
+)
+
+
+subtitle_generate_schema = extend_schema(
+    operation_id='generate_subtitle',
+    summary='Generate subtitles for video content',
+    description=(
+        'Generates subtitles for a project\'s video content. '
+        'For YouTube videos, uses Google Gemini API to create SRT format subtitles. '
+        'For Instagram and LinkedIn videos, returns simple text subtitles. '
+        'Only applicable for projects with video content.'
+    ),
+    tags=['Content'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project to generate subtitles for',
+            required=True,
+        ),
+    ],
+    responses={
+        201: OpenApiResponse(
+            response=SubtitleSerializer,
+            description='Subtitle generation task created successfully',
+            examples=[
+                OpenApiExample(
+                    'Subtitle Generation Started',
+                    value={
+                        'id': 'bb0e8400-e29b-41d4-a716-446655440000',
+                        'content': '990e8400-e29b-41d4-a716-446655440000',
+                        'content_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                        'platform': 'youtube',
+                        'project_title': 'My Video Project',
+                        'task_id': 'celery-task-id-67890',
+                        'status': 'pending',
+                        'subtitle_text': None,
+                        'error_message': None,
+                        'started_at': None,
+                        'completed_at': None,
+                        'created_at': '2024-01-15T12:00:00Z',
+                        'updated_at': '2024-01-15T12:00:00Z',
+                    },
+                    response_only=True,
+                ),
+            ],
+        ),
+        400: OpenApiResponse(
+            description='Bad request - Content is not a video, subtitle already exists, or video not downloaded',
+            examples=[
+                OpenApiExample(
+                    'Not a Video',
+                    value={
+                        'error': 'Content is not a video. Subtitles can only be generated for video content.',
+                    },
+                ),
+                OpenApiExample(
+                    'Subtitle Already Exists',
+                    value={
+                        'error': 'Subtitle already exists for this content.',
+                    },
+                ),
+                OpenApiExample(
+                    'Video Not Downloaded',
+                    value={
+                        'error': 'Video must be downloaded before generating subtitles for instagram. Please wait for the download to complete.',
+                    },
+                ),
+            ],
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        404: OpenApiResponse(
+            description='Project or content not found',
+            examples=[
+                OpenApiExample(
+                    'Project Not Found',
+                    value={
+                        'error': 'Project not found or access denied.',
+                    },
+                ),
+                OpenApiExample(
+                    'Content Not Found',
+                    value={
+                        'error': 'No content found for this project.',
+                    },
+                ),
+            ],
+        ),
+    },
+)
+
+
+subtitle_status_schema = extend_schema(
+    operation_id='get_subtitle_status',
+    summary='Get subtitle generation status and result',
+    description=(
+        'Retrieves the current status and result of the subtitle generation task for a specific project. '
+        'Returns the complete subtitle text when generation is completed. '
+        'Only applicable for projects with video content.'
+    ),
+    tags=['Content'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project to check subtitle status for',
+            required=True,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=SubtitleSerializer,
+            description='Subtitle status retrieved successfully',
+            examples=[
+                OpenApiExample(
+                    'Subtitle Pending',
+                    value={
+                        'id': 'bb0e8400-e29b-41d4-a716-446655440000',
+                        'content': '990e8400-e29b-41d4-a716-446655440000',
+                        'content_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                        'platform': 'youtube',
+                        'project_title': 'My Video Project',
+                        'task_id': 'celery-task-id-67890',
+                        'status': 'pending',
+                        'subtitle_text': None,
+                        'error_message': None,
+                        'started_at': None,
+                        'completed_at': None,
+                        'created_at': '2024-01-15T12:00:00Z',
+                        'updated_at': '2024-01-15T12:00:00Z',
+                    },
+                    response_only=True,
+                ),
+                OpenApiExample(
+                    'Subtitle Generating',
+                    value={
+                        'id': 'bb0e8400-e29b-41d4-a716-446655440000',
+                        'content': '990e8400-e29b-41d4-a716-446655440000',
+                        'content_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                        'platform': 'youtube',
+                        'project_title': 'My Video Project',
+                        'task_id': 'celery-task-id-67890',
+                        'status': 'generating',
+                        'subtitle_text': None,
+                        'error_message': None,
+                        'started_at': '2024-01-15T12:00:30Z',
+                        'completed_at': None,
+                        'created_at': '2024-01-15T12:00:00Z',
+                        'updated_at': '2024-01-15T12:00:30Z',
+                    },
+                    response_only=True,
+                ),
+                OpenApiExample(
+                    'Subtitle Completed',
+                    value={
+                        'id': 'bb0e8400-e29b-41d4-a716-446655440000',
+                        'content': '990e8400-e29b-41d4-a716-446655440000',
+                        'content_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                        'platform': 'youtube',
+                        'project_title': 'My Video Project',
+                        'task_id': 'celery-task-id-67890',
+                        'status': 'completed',
+                        'subtitle_text': '1\n00:00:00,000 --> 00:00:03,000\nFirst subtitle text here\n\n2\n00:00:03,000 --> 00:00:06,000\nSecond subtitle text here',
+                        'error_message': None,
+                        'started_at': '2024-01-15T12:00:30Z',
+                        'completed_at': '2024-01-15T12:02:15Z',
+                        'created_at': '2024-01-15T12:00:00Z',
+                        'updated_at': '2024-01-15T12:02:15Z',
+                    },
+                    response_only=True,
+                ),
+                OpenApiExample(
+                    'Subtitle Failed',
+                    value={
+                        'id': 'bb0e8400-e29b-41d4-a716-446655440000',
+                        'content': '990e8400-e29b-41d4-a716-446655440000',
+                        'content_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                        'platform': 'youtube',
+                        'project_title': 'My Video Project',
+                        'task_id': 'celery-task-id-67890',
+                        'status': 'failed',
+                        'subtitle_text': None,
+                        'error_message': 'GEMINI_API_KEY not configured in settings',
+                        'started_at': '2024-01-15T12:00:30Z',
+                        'completed_at': '2024-01-15T12:00:35Z',
+                        'created_at': '2024-01-15T12:00:00Z',
+                        'updated_at': '2024-01-15T12:00:35Z',
+                    },
+                    response_only=True,
+                ),
+            ],
+        ),
+        400: OpenApiResponse(
+            description='Bad request - Content is not a video',
+            examples=[
+                OpenApiExample(
+                    'Not a Video',
+                    value={
+                        'error': 'Content is not a video.',
+                    },
+                ),
+            ],
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        404: OpenApiResponse(
+            description='Project, content, or subtitle not found',
+            examples=[
+                OpenApiExample(
+                    'Project Not Found',
+                    value={
+                        'error': 'Project not found or access denied.',
+                    },
+                ),
+                OpenApiExample(
+                    'Content Not Found',
+                    value={
+                        'error': 'No content found for this project.',
+                    },
+                ),
+                OpenApiExample(
+                    'Subtitle Not Found',
+                    value={
+                        'error': 'No subtitle found for this content. Generate subtitles first.',
+                    },
+                ),
+            ],
+        ),
+    },
+)

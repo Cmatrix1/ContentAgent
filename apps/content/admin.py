@@ -1,5 +1,5 @@
 from django.contrib import admin
-from apps.content.models import Content, VideoDownloadTask
+from apps.content.models import Content, VideoDownloadTask, Subtitle
 
 
 @admin.register(Content)
@@ -55,6 +55,39 @@ class VideoDownloadTaskAdmin(admin.ModelAdmin):
         }),
         ('Download Details', {
             'fields': ('download_url', 'file_size', 'error_message')
+        }),
+        ('Timestamps', {
+            'fields': ('started_at', 'completed_at', 'created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(Subtitle)
+class SubtitleAdmin(admin.ModelAdmin):
+    list_display = [
+        'id',
+        'content',
+        'status',
+        'created_at',
+        'completed_at',
+    ]
+    list_filter = ['status', 'created_at']
+    search_fields = ['content__project__title', 'task_id']
+    readonly_fields = [
+        'id',
+        'task_id',
+        'started_at',
+        'completed_at',
+        'created_at',
+        'updated_at'
+    ]
+    
+    fieldsets = (
+        ('Subtitle Information', {
+            'fields': ('id', 'content', 'task_id', 'status')
+        }),
+        ('Subtitle Details', {
+            'fields': ('subtitle_text', 'error_message')
         }),
         ('Timestamps', {
             'fields': ('started_at', 'completed_at', 'created_at', 'updated_at')

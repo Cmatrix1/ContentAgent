@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 from django.utils import timezone
-from apps.content.models import Content, VideoDownloadTask
+from apps.content.models import Content, VideoDownloadTask, Subtitle
 from apps.search.models import Project, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -172,6 +172,97 @@ def update_content_file_path(content_id: str, file_path: str) -> Optional[Conten
     logger.info(f"Updated content {content_id} file path to {file_path}")
     
     return content
+
+
+def delete_content(content: Content) -> None:
+    """
+    Delete a content entry and its associated download task.
+    
+    Args:
+        content: The content instance to delete
+    
+    Returns:
+        None
+    """
+    content_id = content.id
+    project_id = content.project.id
+
+    content.delete()
+    
+    logger.info(f"Deleted content {content_id} for project {project_id}")
+
+
+def create_subtitle_generation_task(content: Content) -> Subtitle:
+    """
+    Create a subtitle generation task for video content.
+    
+    Args:
+        content: The content to create subtitle task for
+    
+    Returns:
+        Created Subtitle instance
+    
+    Raises:
+        ValueError: If video is not downloaded for Instagram/LinkedIn platforms
+    """
+    # For Instagram/LinkedIn, ensure video is downloaded first
+    if content.platform in ['instagram', 'linkedin'] and not content.file_path:
+        raise ValueError(f"Video must be downloaded before generating subtitles for {content.platform}. Please wait for the download to complete.")
+    
+    subtitle = Subtitle.objects.create(
+        content=content,
+        status='pending'
+    )
+    
+    logger.info(f"Created subtitle generation task {subtitle.id} for content {content.id}")
+    
+    from apps.content.tasks import generate_subtitle_task
+    celery_task = generate_subtitle_task.delay(str(subtitle.id))
+    
+    subtitle.task_id = celery_task.id
+    subtitle.save(update_fields=['task_id'])
+    
+    return subtitle
+
+
+def update_subtitle_status(
+    subtitle_id: str,
+    status: str,
+    subtitle_text: str = None,
+    error_message: str = None
+) -> Optional[Subtitle]:
+    """
+    Update the status of a subtitle generation task.
+    
+    Args:
+        subtitle_id: UUID of the Subtitle
+        status: New status
+        subtitle_text: Generated subtitle text
+        error_message: Error message if failed
+    
+    Returns:
+        Updated Subtitle instance or None if not found
+    """
+    subtitle = Subtitle.objects.get(id=subtitle_id)
+    subtitle.status = status
+    
+    if subtitle_text is not None:
+        subtitle.subtitle_text = subtitle_text
+    
+    if error_message is not None:
+        subtitle.error_message = error_message
+    
+    if status == 'generating' and not subtitle.started_at:
+        subtitle.started_at = timezone.now()
+    
+    if status in ['completed', 'failed']:
+        subtitle.completed_at = timezone.now()
+
+    subtitle.save()
+    
+    logger.info(f"Updated subtitle {subtitle_id} status to {status}")
+    
+    return subtitle
 
 
 
