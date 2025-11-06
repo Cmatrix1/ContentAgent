@@ -10,7 +10,7 @@ ENV PYTHONUNBUFFERED=1 \
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including ffmpeg for subtitle burning
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     gcc \
@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     musl-dev \
     libpq-dev \
     netcat-traditional \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file

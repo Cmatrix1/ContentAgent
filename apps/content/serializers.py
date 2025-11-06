@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
-from apps.content.models import Content, VideoDownloadTask, Subtitle
+from apps.content.models import Content, VideoDownloadTask, Subtitle, SubtitleBurnTask, WatermarkTask
 
 
 class ContentSerializer(serializers.ModelSerializer):
@@ -101,6 +101,7 @@ class SubtitleSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'content',
+            'language',
             'content_url',
             'platform',
             'project_title',
@@ -124,4 +125,109 @@ class SubtitleSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+
+class SubtitleTranslateSerializer(serializers.Serializer):
+    """
+    Serializer for subtitle translation request.
+    """
+    source_subtitle_id = serializers.UUIDField(
+        help_text='UUID of the source subtitle to translate from'
+    )
+    target_language = serializers.CharField(
+        default='persian',
+        help_text='Target language for translation (e.g., persian, english, spanish)'
+    )
+
+
+class SubtitleBurnTaskSerializer(serializers.ModelSerializer):
+    """
+    Serializer for SubtitleBurnTask model.
+    """
+    subtitle_language = serializers.CharField(source='subtitle.language', read_only=True)
+    content_id = serializers.UUIDField(source='subtitle.content.id', read_only=True)
+    
+    class Meta:
+        model = SubtitleBurnTask
+        fields = [
+            'id',
+            'subtitle',
+            'subtitle_language',
+            'content_id',
+            'task_id',
+            'status',
+            'output_file_path',
+            'error_message',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'task_id',
+            'status',
+            'output_file_path',
+            'error_message',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+        ]
+
+
+class WatermarkTaskSerializer(serializers.ModelSerializer):
+    """
+    Serializer for WatermarkTask model.
+    """
+    content_id = serializers.UUIDField(source='content.id', read_only=True)
+    watermark_image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = WatermarkTask
+        fields = [
+            'id',
+            'content',
+            'content_id',
+            'watermark_image',
+            'watermark_image_url',
+            'task_id',
+            'status',
+            'output_file_path',
+            'error_message',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'task_id',
+            'status',
+            'output_file_path',
+            'error_message',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+        ]
+    
+    def get_watermark_image_url(self, obj):
+        """Get the full URL of the watermark image."""
+        if obj.watermark_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.watermark_image.url)
+            return obj.watermark_image.url
+        return None
+
+
+class WatermarkCreateSerializer(serializers.Serializer):
+    """
+    Serializer for creating watermark task with image upload.
+    """
+    watermark_image = serializers.ImageField(
+        help_text='Watermark image file (PNG with transparency recommended)',
+        required=True
+    )
 

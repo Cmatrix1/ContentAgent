@@ -3,7 +3,7 @@ Selectors for content app - read-only database queries.
 """
 from typing import Optional
 from django.db.models import QuerySet
-from apps.content.models import Content, VideoDownloadTask, Subtitle
+from apps.content.models import Content, VideoDownloadTask, Subtitle, SubtitleBurnTask, WatermarkTask
 from apps.search.models import Project
 
 
@@ -109,18 +109,64 @@ def get_subtitle_by_id(subtitle_id: str) -> Optional[Subtitle]:
         return None
 
 
-def get_subtitle_by_content(content: Content) -> Optional[Subtitle]:
+def get_subtitle_by_content(content: Content, language: str = 'original') -> Optional[Subtitle]:
     """
-    Get subtitle for a content.
+    Get subtitle for a content by language.
     
     Args:
         content: The content to get subtitle for
+        language: Language of the subtitle (default: 'original')
     
     Returns:
         Subtitle instance or None if not found
     """
     try:
-        return Subtitle.objects.get(content=content)
+        return Subtitle.objects.get(content=content, language=language)
     except Subtitle.DoesNotExist:
+        return None
+
+
+def list_subtitles_by_content(content: Content) -> QuerySet[Subtitle]:
+    """
+    List all subtitles for a content.
+    
+    Args:
+        content: The content to list subtitles for
+    
+    Returns:
+        QuerySet of Subtitle instances
+    """
+    return Subtitle.objects.filter(content=content).order_by('-created_at')
+
+
+def get_burn_task_by_id(burn_task_id: str) -> Optional[SubtitleBurnTask]:
+    """
+    Get subtitle burn task by ID.
+    
+    Args:
+        burn_task_id: UUID of the SubtitleBurnTask
+    
+    Returns:
+        SubtitleBurnTask instance or None if not found
+    """
+    try:
+        return SubtitleBurnTask.objects.select_related('subtitle', 'subtitle__content', 'subtitle__content__project').get(id=burn_task_id)
+    except SubtitleBurnTask.DoesNotExist:
+        return None
+
+
+def get_watermark_task_by_id(watermark_task_id: str) -> Optional[WatermarkTask]:
+    """
+    Get watermark task by ID.
+    
+    Args:
+        watermark_task_id: UUID of the WatermarkTask
+    
+    Returns:
+        WatermarkTask instance or None if not found
+    """
+    try:
+        return WatermarkTask.objects.select_related('content', 'content__project').get(id=watermark_task_id)
+    except WatermarkTask.DoesNotExist:
         return None
 

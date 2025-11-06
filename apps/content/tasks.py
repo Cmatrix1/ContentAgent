@@ -8,13 +8,15 @@ from celery import shared_task
 from django.conf import settings
 from google import genai
 from google.genai import types
-from apps.content.models import VideoDownloadTask, Subtitle
+from apps.content.models import VideoDownloadTask, Subtitle, SubtitleBurnTask, WatermarkTask
 from apps.content.services import (
     update_download_task_status,
     update_content_file_path,
     update_subtitle_status,
+    update_burn_task_status,
+    update_watermark_task_status,
 )
-from apps.content.selectors import get_download_task_by_id, get_subtitle_by_id
+from apps.content.selectors import get_download_task_by_id, get_subtitle_by_id, get_burn_task_by_id, get_watermark_task_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -541,6 +543,334 @@ def generate_subtitle_task(self, subtitle_id: str):
             return {
                 'status': 'error',
                 'subtitle_id': subtitle_id,
+                'message': str(e)
+            }
+
+
+TRANSLATION_PROMPT_TEMPLATE = """
+🎯 **OBJECTIVE**
+Translate the following video subtitle from its original language to **{target_language}** while preserving the exact SRT format, timing, and structure.
+
+---
+
+### 🧠 ROLE
+You are a professional subtitle translator specializing in maintaining technical accuracy and cultural nuances.
+
+---
+
+### ⚙️ CORE REQUIREMENTS
+
+#### 1. Translation Quality
+- Translate ONLY the text content to {target_language}
+- Maintain natural, fluent language that feels native
+- Preserve the meaning, tone, and context
+- Keep cultural references understandable for {target_language} speakers
+- Do NOT translate names, brands, or technical terms unless necessary
+
+#### 2. Format Preservation
+- Keep ALL timestamps EXACTLY as they are - DO NOT modify timing
+- Maintain the exact SRT structure:
+  - Sequential numbering (1, 2, 3, ...)
+  - Timestamp format: HH:MM:SS,mmm --> HH:MM:SS,mmm
+  - Blank lines between subtitle blocks
+- Keep line breaks and subtitle segmentation
+- Preserve punctuation style appropriate for {target_language}
+
+#### 3. Text Length & Readability
+- Keep translations concise and readable
+- Try to match the original text length when possible
+- If translation is longer, you may split into 2 short lines
+- Ensure subtitles remain easy to read at original timing
+
+#### 4. Output Format
+- Return ONLY the translated SRT content
+- No markdown, code fences, or explanations
+- Ready to save directly as .srt file
+- Maintain clean formatting with proper line breaks
+
+---
+
+### ✅ EXAMPLE
+
+**Original (English):**
+```
+1
+00:00:00,000 --> 00:00:03,200
+Hey everyone, welcome back!
+
+2
+00:00:03,200 --> 00:00:06,800
+Today I'll show you something cool.
+```
+
+**Translated (Persian):**
+```
+1
+00:00:00,000 --> 00:00:03,200
+سلام به همه، خوش برگشتید!
+
+2
+00:00:03,200 --> 00:00:06,800
+امروز یه چیز جالب نشونتون میدم.
+```
+
+---
+
+### 🧩 FINAL REMINDERS
+- ONLY translate the subtitle text, NOT the timestamps or numbers
+- Maintain the exact same SRT structure
+- Output must be clean, valid SRT format
+- Use natural, native {target_language}
+
+---
+
+### SOURCE SUBTITLE TO TRANSLATE:
+
+{source_subtitle_text}
+"""
+
+
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def burn_subtitle_task(self, burn_task_id: str):
+    """
+    Celery task to burn (hardcode) subtitles into video using ffmpeg.
+    
+    Args:
+        burn_task_id: UUID of the SubtitleBurnTask
+    
+    Returns:
+        Dictionary with result information
+    """
+    logger.info(f"Starting subtitle burn task {burn_task_id}")
+    
+    try:
+        burn_task = get_burn_task_by_id(burn_task_id)
+        
+        if not burn_task:
+            logger.error(f"Burn task {burn_task_id} not found")
+            return {'status': 'error', 'message': 'Burn task not found'}
+        
+        update_burn_task_status(
+            burn_task_id=burn_task_id,
+            status='processing'
+        )
+        
+        subtitle = burn_task.subtitle
+        content = subtitle.content
+        
+        if not content.file_path:
+            raise Exception("Video file not found")
+        
+        if not subtitle.subtitle_text:
+            raise Exception("Subtitle text is empty")
+        
+        video_file_path = os.path.join(settings.MEDIA_ROOT, content.file_path)
+        
+        if not os.path.exists(video_file_path):
+            raise Exception(f"Video file not found at path: {video_file_path}")
+        
+        subtitle_dir = os.path.join(settings.MEDIA_ROOT, 'subtitles')
+        os.makedirs(subtitle_dir, exist_ok=True)
+        
+        subtitle_filename = f"{burn_task_id}.srt"
+        subtitle_file_path = os.path.join(subtitle_dir, subtitle_filename)
+        
+        try:
+            with open(subtitle_file_path, 'w', encoding='utf-8') as f:
+                f.write(subtitle.subtitle_text)
+            
+            output_dir = os.path.join(settings.MEDIA_ROOT, 'videos', 'subtitled')
+            os.makedirs(output_dir, exist_ok=True)
+            
+            output_filename = f"{content.id}_{subtitle.language}.mp4"
+            output_file_path = os.path.join(output_dir, output_filename)
+    
+            subtitle_path_escaped = subtitle_file_path.replace('\\', '/')
+
+            force_style = (
+                "FontName=Arial,"
+                "FontSize=24,"
+                "PrimaryColour=&H00FFFFFF,"
+                "OutlineColour=&H00000000,"
+                "BorderStyle=3,"
+                "Outline=2,"
+                "Shadow=1"
+            )
+
+            filter_string = f"subtitles={subtitle_path_escaped}:force_style='{force_style}'"
+
+            cmd = [
+                'ffmpeg',
+                '-i', video_file_path,
+                '-vf', filter_string,
+                '-c:a', 'copy',
+                '-y',
+                output_file_path
+            ]
+
+            logger.info(f"Running ffmpeg command: {' '.join(cmd)}")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600  
+            )
+            
+            if result.returncode != 0:
+                raise Exception(f"ffmpeg failed: {result.stderr}")
+            
+            # Calculate relative path
+            relative_output_path = os.path.join('videos', 'subtitled', output_filename)
+            
+            update_burn_task_status(
+                burn_task_id=burn_task_id,
+                status='completed',
+                output_file_path=relative_output_path
+            )
+            
+            logger.info(f"Subtitle burn task {burn_task_id} completed successfully")
+            
+            return {
+                'status': 'success',
+                'burn_task_id': burn_task_id,
+                'output_file_path': relative_output_path
+            }
+        
+        finally:
+            # Clean up temporary subtitle file
+            if os.path.exists(subtitle_file_path):
+                os.remove(subtitle_file_path)
+    
+    except Exception as e:
+        logger.error(f"Subtitle burn task {burn_task_id} failed: {str(e)}", exc_info=True)
+        
+        update_burn_task_status(
+            burn_task_id=burn_task_id,
+            status='failed',
+            error_message=str(e)
+        )
+        
+        try:
+            raise self.retry(exc=e)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for burn task {burn_task_id}")
+            return {
+                'status': 'error',
+                'burn_task_id': burn_task_id,
+                'message': str(e)
+            }
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def burn_watermark_task(self, watermark_task_id: str):
+    """
+    Celery task to burn (hardcode) watermark into video using ffmpeg.
+    
+    Args:
+        watermark_task_id: UUID of the WatermarkTask
+    
+    Returns:
+        Dictionary with result information
+    """
+    logger.info(f"Starting watermark burn task {watermark_task_id}")
+    
+    try:
+        watermark_task = get_watermark_task_by_id(watermark_task_id)
+        
+        if not watermark_task:
+            logger.error(f"Watermark task {watermark_task_id} not found")
+            return {'status': 'error', 'message': 'Watermark task not found'}
+        
+        update_watermark_task_status(
+            watermark_task_id=watermark_task_id,
+            status='processing'
+        )
+        
+        content = watermark_task.content
+        
+        if not content.file_path:
+            raise Exception("Video file not found")
+        
+        if not watermark_task.watermark_image:
+            raise Exception("Watermark image is missing")
+        
+
+        video_file_path = os.path.join(settings.MEDIA_ROOT, content.file_path)
+        
+        if not os.path.exists(video_file_path):
+            raise Exception(f"Video file not found at path: {video_file_path}")
+
+        watermark_image_path = os.path.join(settings.MEDIA_ROOT, watermark_task.watermark_image.name)
+        
+        if not os.path.exists(watermark_image_path):
+            raise Exception(f"Watermark image not found at path: {watermark_image_path}")
+        
+        # Create output file path
+        output_dir = os.path.join(settings.MEDIA_ROOT, 'videos', 'watermarked')
+        os.makedirs(output_dir, exist_ok=True)
+        
+        output_filename = f"{content.id}_watermarked.mp4"
+        output_file_path = os.path.join(output_dir, output_filename)
+
+        cmd = [
+            'ffmpeg',
+            '-i', video_file_path,
+            '-i', watermark_image_path,
+            '-filter_complex', '[1:v]format=rgba[watermark];[0:v][watermark]overlay=W-w-10:H-h-10',
+            '-c:a', 'copy',  
+            '-y', 
+            output_file_path
+        ]
+        
+        logger.info(f"Running ffmpeg command: {' '.join(cmd)}")
+        
+        # Run ffmpeg command
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minutes timeout
+        )
+        
+        if result.returncode != 0:
+            raise Exception(f"ffmpeg failed: {result.stderr}")
+        
+        # Calculate relative path
+        relative_output_path = os.path.join('videos', 'watermarked', output_filename)
+        
+        update_watermark_task_status(
+            watermark_task_id=watermark_task_id,
+            status='completed',
+            output_file_path=relative_output_path
+        )
+        
+        logger.info(f"Watermark burn task {watermark_task_id} completed successfully")
+        
+        return {
+            'status': 'success',
+            'watermark_task_id': watermark_task_id,
+            'output_file_path': relative_output_path
+        }
+    
+    except Exception as e:
+        logger.error(f"Watermark burn task {watermark_task_id} failed: {str(e)}", exc_info=True)
+        
+        update_watermark_task_status(
+            watermark_task_id=watermark_task_id,
+            status='failed',
+            error_message=str(e)
+        )
+        
+        try:
+            raise self.retry(exc=e)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for watermark burn task {watermark_task_id}")
+            return {
+                'status': 'error',
+                'watermark_task_id': watermark_task_id,
                 'message': str(e)
             }
 

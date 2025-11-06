@@ -10,6 +10,10 @@ from apps.content.serializers import (
     ContentCreateSerializer,
     VideoDownloadTaskSerializer,
     SubtitleSerializer,
+    SubtitleTranslateSerializer,
+    SubtitleBurnTaskSerializer,
+    WatermarkTaskSerializer,
+    WatermarkCreateSerializer,
 )
 
 
@@ -398,11 +402,11 @@ subtitle_generate_schema = extend_schema(
     summary='Generate subtitles for video content',
     description=(
         'Generates subtitles for a project\'s video content. '
-        'For YouTube videos, uses Google Gemini API to create SRT format subtitles. '
-        'For Instagram and LinkedIn videos, returns simple text subtitles. '
-        'Only applicable for projects with video content.'
+        'Uses Google Gemini API to create SRT format subtitles. '
+        'For Instagram and LinkedIn videos, the video must be downloaded first. '
+        'If subtitle generation previously failed, this endpoint will allow regeneration.'
     ),
-    tags=['Content'],
+    tags=['Subtitles'],
     parameters=[
         OpenApiParameter(
             name='project_id',
@@ -485,6 +489,279 @@ subtitle_generate_schema = extend_schema(
 )
 
 
+subtitle_list_schema = extend_schema(
+    operation_id='list_subtitles',
+    summary='List all subtitles for a project',
+    description=(
+        'Retrieves all subtitles for a project\'s video content. '
+        'Returns subtitles in all languages that have been generated or translated.'
+    ),
+    tags=['Subtitles'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project to list subtitles for',
+            required=True,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=SubtitleSerializer(many=True),
+            description='Subtitles list retrieved successfully',
+        ),
+        400: OpenApiResponse(
+            description='Bad request - Content is not a video',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        404: OpenApiResponse(
+            description='Project or content not found',
+        ),
+    },
+)
+
+
+subtitle_delete_schema = extend_schema(
+    operation_id='delete_subtitle',
+    summary='Delete a specific subtitle',
+    description=(
+        'Deletes a subtitle and all its associated burn tasks. '
+        'This action cannot be undone.'
+    ),
+    tags=['Subtitles'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project',
+            required=True,
+        ),
+        OpenApiParameter(
+            name='subtitle_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the subtitle to delete',
+            required=True,
+        ),
+    ],
+    responses={
+        204: OpenApiResponse(
+            description='Subtitle deleted successfully',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        403: OpenApiResponse(
+            description='Subtitle does not belong to this project'
+        ),
+        404: OpenApiResponse(
+            description='Project or subtitle not found',
+        ),
+    },
+)
+
+
+subtitle_translate_schema = extend_schema(
+    operation_id='translate_subtitle',
+    summary='Translate subtitle to another language (synchronous)',
+    description=(
+        'Translates an existing subtitle to a different language using AI synchronously. '
+        'The translation preserves the SRT format and timing. '
+        'Default target language is Persian. '
+        'This is a synchronous operation that returns the completed translation immediately. '
+        'If a translation to the target language already exists and has failed, it will retry the translation. '
+        'If the translation exists and is not failed, an error will be returned.'
+    ),
+    tags=['Subtitles'],
+    request=SubtitleTranslateSerializer,
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project',
+            required=True,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=SubtitleSerializer,
+            description='Translation completed successfully',
+            examples=[
+                OpenApiExample(
+                    'Translation Completed',
+                    value={
+                        'id': 'cc0e8400-e29b-41d4-a716-446655440000',
+                        'content': '990e8400-e29b-41d4-a716-446655440000',
+                        'language': 'persian',
+                        'content_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                        'platform': 'youtube',
+                        'project_title': 'My Video Project',
+                        'task_id': None,
+                        'status': 'completed',
+                        'subtitle_text': '1\n00:00:00,000 --> 00:00:03,000\nمتن زیرنویس اول اینجاست',
+                        'error_message': None,
+                        'started_at': '2024-01-15T13:00:00Z',
+                        'completed_at': '2024-01-15T13:00:15Z',
+                        'created_at': '2024-01-15T13:00:00Z',
+                        'updated_at': '2024-01-15T13:00:15Z',
+                    },
+                    response_only=True,
+                ),
+            ],
+        ),
+        400: OpenApiResponse(
+            description='Bad request - Invalid data, translation requirements not met, or translation already exists',
+            examples=[
+                OpenApiExample(
+                    'Translation Already Exists',
+                    value={
+                        'error': 'Subtitle in persian already exists for this content. Delete it first if you want to retranslate.',
+                    },
+                ),
+                OpenApiExample(
+                    'Source Not Completed',
+                    value={
+                        'error': 'Source subtitle must be completed before translation',
+                    },
+                ),
+            ],
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        403: OpenApiResponse(
+            description='Source subtitle does not belong to this project'
+        ),
+        404: OpenApiResponse(
+            description='Project, content, or source subtitle not found',
+        ),
+        500: OpenApiResponse(
+            description='Internal server error - Translation failed due to API or processing error',
+            examples=[
+                OpenApiExample(
+                    'Translation Failed',
+                    value={
+                        'error': 'Translation failed: GEMINI_API_KEY not configured in settings',
+                    },
+                ),
+            ],
+        ),
+    },
+    examples=[
+        OpenApiExample(
+            'Translate to Persian',
+            value={
+                'source_subtitle_id': 'bb0e8400-e29b-41d4-a716-446655440000',
+                'target_language': 'persian',
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            'Translate to Spanish',
+            value={
+                'source_subtitle_id': 'bb0e8400-e29b-41d4-a716-446655440000',
+                'target_language': 'spanish',
+            },
+            request_only=True,
+        ),
+    ],
+)
+
+
+subtitle_burn_schema = extend_schema(
+    operation_id='burn_subtitle',
+    summary='Burn (hardcode) subtitle into video',
+    description=(
+        'Creates a new video file with subtitles permanently burned into the video using ffmpeg. '
+        'The subtitle must be completed before burning. '
+        'Returns a task that can be monitored for completion.'
+    ),
+    tags=['Subtitles'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project',
+            required=True,
+        ),
+        OpenApiParameter(
+            name='subtitle_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the subtitle to burn',
+            required=True,
+        ),
+    ],
+    responses={
+        201: OpenApiResponse(
+            response=SubtitleBurnTaskSerializer,
+            description='Burn task created successfully',
+        ),
+        400: OpenApiResponse(
+            description='Bad request - Subtitle or video not ready for burning',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        403: OpenApiResponse(
+            description='Subtitle does not belong to this project'
+        ),
+        404: OpenApiResponse(
+            description='Project or subtitle not found',
+        ),
+    },
+)
+
+
+subtitle_burn_status_schema = extend_schema(
+    operation_id='get_burn_task_status',
+    summary='Get subtitle burn task status',
+    description=(
+        'Retrieves the current status of a subtitle burn task. '
+        'Returns the output file path when the task is completed.'
+    ),
+    tags=['Subtitles'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project',
+            required=True,
+        ),
+        OpenApiParameter(
+            name='burn_task_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the burn task',
+            required=True,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=SubtitleBurnTaskSerializer,
+            description='Burn task status retrieved successfully',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        403: OpenApiResponse(
+            description='Burn task does not belong to this project'
+        ),
+        404: OpenApiResponse(
+            description='Project or burn task not found',
+        ),
+    },
+)
+
+
+# Keep the old subtitle_status_schema for backward compatibility if needed
 subtitle_status_schema = extend_schema(
     operation_id='get_subtitle_status',
     summary='Get subtitle generation status and result',
@@ -493,7 +770,7 @@ subtitle_status_schema = extend_schema(
         'Returns the complete subtitle text when generation is completed. '
         'Only applicable for projects with video content.'
     ),
-    tags=['Content'],
+    tags=['Subtitles'],
     parameters=[
         OpenApiParameter(
             name='project_id',
@@ -622,6 +899,87 @@ subtitle_status_schema = extend_schema(
                     },
                 ),
             ],
+        ),
+    },
+)
+
+
+# WATERMARK ENDPOINTS SCHEMAS
+watermark_create_schema = extend_schema(
+    operation_id='create_watermark_task',
+    summary='Burn watermark into video',
+    description=(
+        'Uploads a watermark image and burns it into the project\'s video. '
+        'The watermark will be positioned at the bottom right corner of the video. '
+        'PNG images with transparency are recommended for best results. '
+        'Returns a task that can be monitored for completion.'
+    ),
+    tags=['Watermarks'],
+    request=WatermarkCreateSerializer,
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project',
+            required=True,
+        ),
+    ],
+    responses={
+        201: OpenApiResponse(
+            response=WatermarkTaskSerializer,
+            description='Watermark task created successfully',
+        ),
+        400: OpenApiResponse(
+            description='Bad request - Video not downloaded or invalid data',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        404: OpenApiResponse(
+            description='Project or content not found',
+        ),
+    },
+)
+
+
+watermark_status_schema = extend_schema(
+    operation_id='get_watermark_task_status',
+    summary='Get watermark task status',
+    description=(
+        'Retrieves the current status of a watermark task. '
+        'Returns the output file path when the task is completed.'
+    ),
+    tags=['Watermarks'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project',
+            required=True,
+        ),
+        OpenApiParameter(
+            name='watermark_task_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the watermark task',
+            required=True,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=WatermarkTaskSerializer,
+            description='Watermark task status retrieved successfully',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        403: OpenApiResponse(
+            description='Watermark task does not belong to this project'
+        ),
+        404: OpenApiResponse(
+            description='Project or watermark task not found',
         ),
     },
 )

@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 from django.utils import timezone
-from apps.content.models import Content, VideoDownloadTask, Subtitle
+from apps.content.models import Content, VideoDownloadTask, Subtitle, SubtitleBurnTask, WatermarkTask
 from apps.search.models import Project, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -192,12 +192,13 @@ def delete_content(content: Content) -> None:
     logger.info(f"Deleted content {content_id} for project {project_id}")
 
 
-def create_subtitle_generation_task(content: Content) -> Subtitle:
+def create_subtitle_generation_task(content: Content, language: str = 'original') -> Subtitle:
     """
     Create a subtitle generation task for video content.
     
     Args:
         content: The content to create subtitle task for
+        language: Language of the subtitle (default: 'original')
     
     Returns:
         Created Subtitle instance
@@ -211,10 +212,11 @@ def create_subtitle_generation_task(content: Content) -> Subtitle:
     
     subtitle = Subtitle.objects.create(
         content=content,
+        language=language,
         status='pending'
     )
     
-    logger.info(f"Created subtitle generation task {subtitle.id} for content {content.id}")
+    logger.info(f"Created subtitle generation task {subtitle.id} for content {content.id} in {language}")
     
     from apps.content.tasks import generate_subtitle_task
     celery_task = generate_subtitle_task.delay(str(subtitle.id))
@@ -263,6 +265,281 @@ def update_subtitle_status(
     logger.info(f"Updated subtitle {subtitle_id} status to {status}")
     
     return subtitle
+
+
+def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: str) -> Subtitle:
+    """
+    Translate a subtitle synchronously using AI.
+    
+    Args:
+        source_subtitle: The source subtitle to translate from
+        target_language: Target language for translation
+    
+    Returns:
+        Created or updated Subtitle instance with translation
+    
+    Raises:
+        ValueError: If source subtitle is not completed or translation requirements not met
+    """
+    from django.conf import settings
+    from google import genai
+    
+    if source_subtitle.status != 'completed':
+        raise ValueError("Source subtitle must be completed before translation")
+    
+    if not source_subtitle.subtitle_text:
+        raise ValueError("Source subtitle has no text to translate")
+    
+    # Check if translation already exists for this language
+    existing_translation = Subtitle.objects.filter(
+        content=source_subtitle.content,
+        language=target_language
+    ).first()
+    
+    # If exists and not failed, raise error
+    if existing_translation and existing_translation.status != 'failed':
+        raise ValueError(f"Subtitle in {target_language} already exists for this content. Delete it first if you want to retranslate.")
+    
+    # If failed translation exists, reuse it for retry
+    if existing_translation and existing_translation.status == 'failed':
+        subtitle = existing_translation
+        subtitle.status = 'generating'
+        subtitle.error_message = None
+        subtitle.started_at = timezone.now()
+        subtitle.save(update_fields=['status', 'error_message', 'started_at'])
+        logger.info(f"Retrying failed translation {subtitle.id} to {target_language}")
+    else:
+        # Create new subtitle for translation
+        subtitle = Subtitle.objects.create(
+            content=source_subtitle.content,
+            language=target_language,
+            status='generating',
+            started_at=timezone.now()
+        )
+        logger.info(f"Created subtitle translation {subtitle.id} from {source_subtitle.id} to {target_language}")
+    
+    try:
+        # Get API key
+        api_key = settings.GEMINI_API_KEY
+        if not api_key:
+            raise Exception("GEMINI_API_KEY not configured in settings")
+        
+        client = genai.Client(api_key=api_key)
+        
+        # Prepare translation prompt
+        from apps.content.tasks import TRANSLATION_PROMPT_TEMPLATE
+        prompt = TRANSLATION_PROMPT_TEMPLATE.format(
+            target_language=target_language,
+            source_subtitle_text=source_subtitle.subtitle_text
+        )
+        
+        logger.info(f"Calling Gemini API for subtitle translation to {target_language}")
+        
+        # Call Gemini API
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[prompt]
+        )
+        
+        translated_text = response.text.strip()
+        
+        # Clean up any markdown formatting if present
+        if translated_text.startswith('```'):
+            lines = translated_text.split('\n')
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            translated_text = '\n'.join(lines)
+        
+        # Update subtitle with translation
+        subtitle.subtitle_text = translated_text
+        subtitle.status = 'completed'
+        subtitle.completed_at = timezone.now()
+        subtitle.save(update_fields=['subtitle_text', 'status', 'completed_at'])
+        
+        logger.info(f"Subtitle translation {subtitle.id} completed successfully")
+        
+        return subtitle
+        
+    except Exception as e:
+        # Mark as failed
+        subtitle.status = 'failed'
+        subtitle.error_message = str(e)
+        subtitle.completed_at = timezone.now()
+        subtitle.save(update_fields=['status', 'error_message', 'completed_at'])
+        
+        logger.error(f"Subtitle translation {subtitle.id} failed: {str(e)}", exc_info=True)
+        raise
+
+
+def create_subtitle_burn_task(subtitle: Subtitle) -> SubtitleBurnTask:
+    """
+    Create a subtitle burn task to hardcode subtitles into video.
+    
+    Args:
+        subtitle: The subtitle to burn into video
+    
+    Returns:
+        Created SubtitleBurnTask instance
+    
+    Raises:
+        ValueError: If subtitle is not completed or video not downloaded
+    """
+    if subtitle.status != 'completed':
+        raise ValueError("Subtitle must be completed before burning into video")
+    
+    if not subtitle.subtitle_text:
+        raise ValueError("Subtitle has no text to burn")
+    
+    content = subtitle.content
+    if not content.file_path:
+        raise ValueError("Video file must be downloaded before burning subtitles")
+    
+    burn_task = SubtitleBurnTask.objects.create(
+        subtitle=subtitle,
+        status='pending'
+    )
+    
+    logger.info(f"Created subtitle burn task {burn_task.id} for subtitle {subtitle.id}")
+    
+    from apps.content.tasks import burn_subtitle_task
+    celery_task = burn_subtitle_task.delay(str(burn_task.id))
+    
+    burn_task.task_id = celery_task.id
+    burn_task.save(update_fields=['task_id'])
+    
+    return burn_task
+
+
+def update_burn_task_status(
+    burn_task_id: str,
+    status: str,
+    output_file_path: str = None,
+    error_message: str = None
+) -> Optional[SubtitleBurnTask]:
+    """
+    Update the status of a subtitle burn task.
+    
+    Args:
+        burn_task_id: UUID of the SubtitleBurnTask
+        status: New status
+        output_file_path: Path to the output video file
+        error_message: Error message if failed
+    
+    Returns:
+        Updated SubtitleBurnTask instance or None if not found
+    """
+    burn_task = SubtitleBurnTask.objects.get(id=burn_task_id)
+    burn_task.status = status
+    
+    if output_file_path is not None:
+        burn_task.output_file_path = output_file_path
+    
+    if error_message is not None:
+        burn_task.error_message = error_message
+    
+    if status == 'processing' and not burn_task.started_at:
+        burn_task.started_at = timezone.now()
+    
+    if status in ['completed', 'failed']:
+        burn_task.completed_at = timezone.now()
+
+    burn_task.save()
+    
+    logger.info(f"Updated burn task {burn_task_id} status to {status}")
+    
+    return burn_task
+
+
+def delete_subtitle(subtitle: Subtitle) -> None:
+    """
+    Delete a subtitle and its associated burn tasks.
+    
+    Args:
+        subtitle: The subtitle instance to delete
+    
+    Returns:
+        None
+    """
+    subtitle_id = subtitle.id
+    subtitle.delete()
+    
+    logger.info(f"Deleted subtitle {subtitle_id}")
+
+
+def create_watermark_task(content: Content, watermark_image) -> WatermarkTask:
+    """
+    Create a watermark task to burn watermark into video.
+    
+    Args:
+        content: The content to add watermark to
+        watermark_image: The watermark image file uploaded by user
+    
+    Returns:
+        Created WatermarkTask instance
+    
+    Raises:
+        ValueError: If video not downloaded
+    """
+    if not content.file_path:
+        raise ValueError("Video file must be downloaded before adding watermark")
+    
+    watermark_task = WatermarkTask.objects.create(
+        content=content,
+        watermark_image=watermark_image,
+        status='pending'
+    )
+    
+    logger.info(f"Created watermark task {watermark_task.id} for content {content.id}")
+    
+    from apps.content.tasks import burn_watermark_task
+    celery_task = burn_watermark_task.delay(str(watermark_task.id))
+    
+    watermark_task.task_id = celery_task.id
+    watermark_task.save(update_fields=['task_id'])
+    
+    return watermark_task
+
+
+def update_watermark_task_status(
+    watermark_task_id: str,
+    status: str,
+    output_file_path: str = None,
+    error_message: str = None
+) -> Optional[WatermarkTask]:
+    """
+    Update the status of a watermark task.
+    
+    Args:
+        watermark_task_id: UUID of the WatermarkTask
+        status: New status
+        output_file_path: Path to the output video file
+        error_message: Error message if failed
+    
+    Returns:
+        Updated WatermarkTask instance or None if not found
+    """
+    watermark_task = WatermarkTask.objects.get(id=watermark_task_id)
+    watermark_task.status = status
+    
+    if output_file_path is not None:
+        watermark_task.output_file_path = output_file_path
+    
+    if error_message is not None:
+        watermark_task.error_message = error_message
+    
+    if status == 'processing' and not watermark_task.started_at:
+        watermark_task.started_at = timezone.now()
+    
+    if status in ['completed', 'failed']:
+        watermark_task.completed_at = timezone.now()
+
+    watermark_task.save()
+    
+    logger.info(f"Updated watermark task {watermark_task_id} status to {status}")
+    
+    return watermark_task
 
 
 

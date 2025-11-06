@@ -62,6 +62,7 @@ mypy_extensions==1.1.0
 numpy==1.26.4
 orjson==3.11.4
 packaging==23.2
+Pillow==10.2.0
 prompt_toolkit==3.0.52
 propcache==0.4.1
 proto-plus==1.26.1
