@@ -140,7 +140,8 @@ search_request_create_schema = extend_schema(
     description=(
         'Creates a new search request for a specific project. '
         'This will trigger a Google Custom Search to find relevant content. '
-        'The search results will be automatically fetched and stored.'
+        'The search results will be automatically fetched and stored. '
+        'You can limit the search to specific platforms: linkedin, youtube, instagram.'
     ),
     tags=['Search'],
     request=SearchRequestSerializer,
@@ -166,6 +167,7 @@ search_request_create_schema = extend_schema(
                         'query': 'best practices for Django REST API',
                         'language': 'en',
                         'top_results_count': 10,
+                        'platforms': ['linkedin', 'youtube', 'instagram'],
                         'params': {},
                         'status': 'pending',
                         'created_at': '2024-01-15T10:35:00Z',
@@ -208,22 +210,10 @@ search_request_create_schema = extend_schema(
                 'query': 'Python Django tutorials',
                 'language': 'en',
                 'top_results_count': 10,
+                'platforms': ['youtube', 'instagram', 'linkedin'],
             },
             request_only=True,
-        ),
-        OpenApiExample(
-            'Advanced Search with Parameters',
-            value={
-                'query': 'React hooks explained',
-                'language': 'en',
-                'top_results_count': 20,
-                'params': {
-                    'dateRestrict': 'm6',  # Last 6 months
-                    'siteSearch': 'medium.com',
-                },
-            },
-            request_only=True,
-        ),
+        )
     ],
 )
 

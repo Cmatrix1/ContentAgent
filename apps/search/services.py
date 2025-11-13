@@ -1,13 +1,11 @@
-from typing import Any, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
+from urllib.parse import urlparse
 
 from django.db import transaction
 from django.utils import timezone
 
-from apps.search.models import (
-    Project,
-    SearchRequest,
-    SearchResult,
-)
+from apps.search.constants import SUPPORTED_PLATFORMS, get_default_platforms
+from apps.search.models import Project, SearchRequest, SearchResult
 from apps.search.google_search import search_google, GoogleSearchError
 
 
@@ -48,6 +46,7 @@ def create_search_request(
     language: str = "en",
     top_results_count: int = 10,
     params: Optional[Mapping[str, Any]] = None,
+    platforms: Optional[Iterable[str]] = None,
     auto_search: bool = True
 ) -> SearchRequest:
     """Create a search request and automatically trigger Google search.
@@ -60,12 +59,15 @@ def create_search_request(
     - params: Additional parameters stored as JSON
     - auto_search: Whether to automatically trigger search (default: True)
     """
+    selected_platforms = list(platforms) if platforms is not None else get_default_platforms()
+
     search_request = SearchRequest.objects.create(
         project=project,
         query=query,
         language=language,
         top_results_count=top_results_count,
         params=dict(params or {}),
+        platforms=selected_platforms,
         status="pending",
     )
     
@@ -107,16 +109,22 @@ def perform_google_search(*, search_request: SearchRequest) -> SearchRequest:
             query=search_request.query,
             content_type=project.type,
             num_results=search_request.top_results_count,
+            platforms=search_request.platforms,
+        )
+
+        filtered_results = _filter_results_by_platforms(
+            search_results,
+            search_request.platforms,
         )
         
         result_objects = []
-        for result_data in search_results:
+        for idx, result_data in enumerate(filtered_results, start=1):
             search_result = SearchResult(
                 search_request=search_request,
                 title=result_data["title"],
                 link=result_data["link"],
                 snippet=result_data["snippet"],
-                rank=result_data["rank"],
+                rank=idx,
                 metadata=result_data["metadata"],
             )
             result_objects.append(search_result)
@@ -139,5 +147,41 @@ def perform_google_search(*, search_request: SearchRequest) -> SearchRequest:
         Project.objects.filter(id=project.id).update(status="failed")
         
         raise e
+
+
+def _filter_results_by_platforms(
+    results: list[dict[str, Any]],
+    platforms: Optional[Iterable[str]],
+) -> list[dict[str, Any]]:
+    if not results:
+        return []
+
+    selected_platforms = set(platforms or SUPPORTED_PLATFORMS)
+    allowed_results: list[dict[str, Any]] = []
+
+    for result in results:
+        link = result.get("link", "")
+        if not link:
+            continue
+
+        parsed = urlparse(link)
+        domain = parsed.netloc.lower()
+        path = parsed.path.lower()
+
+        if "youtube" in selected_platforms and (
+            "youtube.com" in domain or "youtu.be" in domain
+        ):
+            allowed_results.append(result)
+            continue
+
+        if "linkedin" in selected_platforms and "linkedin.com" in domain:
+            allowed_results.append(result)
+            continue
+
+        if "instagram" in selected_platforms and "instagram.com" in domain:
+            if path.startswith("/reel"):
+                allowed_results.append(result)
+
+    return allowed_results
 
 

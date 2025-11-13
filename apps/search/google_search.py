@@ -1,6 +1,6 @@
 import requests
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Iterable, Optional, Union
 from django.conf import settings
 from django.core.cache import cache
 
@@ -93,6 +93,7 @@ class GoogleSearchClient:
         query: str,
         content_type: str = "text",
         num_results: int = 10,
+        platforms: Optional[Iterable[str]] = None,
         **kwargs
     ) -> List[Dict[str, Any]]:
         """
@@ -130,6 +131,23 @@ class GoogleSearchClient:
             site_filter = "site:youtube.com OR site:instagram.com OR site:linkedin.com"
             base_params["q"] = f"{query} {site_filter}"
         
+        if platforms:
+            filters = []
+            for platform in platforms:
+                platform = (platform or "").lower()
+                if platform == "youtube":
+                    filters.append("site:youtube.com OR site:youtu.be")
+                elif platform == "linkedin":
+                    filters.append("site:linkedin.com")
+                elif platform == "instagram":
+                    filters.append("site:instagram.com")
+            if filters:
+                site_filter = " OR ".join(filters)
+                base_params["q"] = f"{query} ({site_filter})"
+        elif content_type == "video":
+            site_filter = "site:youtube.com OR site:instagram.com OR site:linkedin.com"
+            base_params["q"] = f"{query} {site_filter}"
+
         base_params.update(kwargs)
         
         last_error = None
@@ -151,7 +169,8 @@ class GoogleSearchClient:
                 data = response.json()
 
                 logger.info(f"Search successful with API key {idx}")
-                return self._parse_results(data)
+                results = self._parse_results(data)
+                return results
                 
             except requests.exceptions.HTTPError as e:
                 if e.response and self._is_quota_error(e.response):
@@ -180,6 +199,7 @@ class GoogleSearchClient:
         query: str,
         content_type: str = "text",
         total_results: int = 10,
+        platforms: Optional[Iterable[str]] = None,
         **kwargs
     ) -> List[Dict[str, Any]]:
         """
@@ -207,7 +227,8 @@ class GoogleSearchClient:
                 query=query,
                 content_type=content_type,
                 num_results=num_to_fetch,
-                **search_kwargs
+                platforms=platforms,
+                **search_kwargs,
             )
             
             if not results:
@@ -260,9 +281,10 @@ class GoogleSearchError(Exception):
 
 
 def search_google(
-    query: str,
-    content_type: str = "text",
-    num_results: int = 10,
+        query: str,
+        content_type: str = "text",
+        num_results: int = 10,
+        platforms: Optional[Iterable[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Convenience function to perform a Google search.
@@ -278,7 +300,7 @@ def search_google(
     client = GoogleSearchClient()
     
     if num_results <= 10:
-        return client.search(query, content_type, num_results)
+        return client.search(query, content_type, num_results, platforms=platforms)
     else:
-        return client.search_multiple_pages(query, content_type, num_results)
+        return client.search_multiple_pages(query, content_type, num_results, platforms=platforms)
 

@@ -108,6 +108,7 @@ class SearchRequestCreateView(APIView):
                 language=serializer.validated_data.get("language", "en"),
                 top_results_count=serializer.validated_data.get("top_results_count", 10),
                 params=serializer.validated_data.get("params"),
+                platforms=serializer.validated_data.get("platforms"),
             )
             response_serializer = self.serializer_class(search_request)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)

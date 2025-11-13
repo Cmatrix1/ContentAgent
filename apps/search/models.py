@@ -2,6 +2,8 @@ import uuid
 from django.db import models
 from django.conf import settings
 
+from apps.search.constants import get_default_platforms
+
 
 class Project(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -45,6 +47,7 @@ class SearchRequest(models.Model):
     language = models.CharField(max_length=50, default="en")
     top_results_count = models.PositiveIntegerField(default=10)
     params = models.JSONField(default=dict, blank=True)
+    platforms = models.JSONField(default=get_default_platforms, blank=True)
     status = models.CharField(
         max_length=30,
         choices=[
