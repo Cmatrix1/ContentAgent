@@ -40,6 +40,7 @@ from apps.search.selectors import get_project_by_id
 from apps.search.models import SearchResult
 from apps.content.schemas import (
     content_create_schema,
+    content_detail_schema,
     video_download_status_schema,
     video_download_task_detail_schema,
     content_delete_schema,
@@ -115,7 +116,34 @@ class ContentCreateView(APIView):
             response_serializer.data,
             status=status.HTTP_201_CREATED
         )
-        
+
+
+class ContentDetailView(APIView):
+    """
+    GET: Retrieve content for a project.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ContentSerializer
+
+    @content_detail_schema
+    def get(self, request, project_id):
+        project = get_project_by_id(owner_id=request.user.id, project_id=project_id)
+        if not project:
+            return Response(
+                {"error": "Project not found or access denied."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        content = get_project_content(project)
+        if not content:
+            return Response(
+                {"error": "No content found for this project."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = self.serializer_class(content)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class VideoDownloadStatusView(APIView):

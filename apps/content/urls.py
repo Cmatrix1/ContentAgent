@@ -4,6 +4,7 @@ URL routing for content app.
 from django.urls import path
 from apps.content.views import (
     ContentCreateView,
+    ContentDetailView,
     VideoDownloadStatusView,
     VideoDownloadTaskDetailView,
     ContentDeleteView,
@@ -22,6 +23,11 @@ app_name = 'content'
 
 urlpatterns = [
     # Content Management
+    path(
+        'projects/<uuid:project_id>/content/',
+        ContentDetailView.as_view(),
+        name='content-detail'
+    ),
     path(
         'projects/<uuid:project_id>/content/create/',
         ContentCreateView.as_view(),

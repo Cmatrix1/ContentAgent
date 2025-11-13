@@ -138,6 +138,53 @@ content_create_schema = extend_schema(
 
 
 
+content_detail_schema = extend_schema(
+    operation_id='get_project_content',
+    summary='Retrieve content for a project',
+    description=(
+        'Retrieves the content associated with a specific project. '
+        'Returns detailed information about the content including download status for video content.'
+    ),
+    tags=['Content'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project to retrieve content for',
+            required=True,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=ContentSerializer,
+            description='Content retrieved successfully',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        404: OpenApiResponse(
+            description='Project or content not found',
+            examples=[
+                OpenApiExample(
+                    'Project Not Found',
+                    value={
+                        'error': 'Project not found or access denied.',
+                    },
+                ),
+                OpenApiExample(
+                    'Content Not Found',
+                    value={
+                        'error': 'No content found for this project.',
+                    },
+                ),
+            ],
+        ),
+    },
+)
+
+
+
 # VIDEO DOWNLOAD ENDPOINTS SCHEMAS
 video_download_status_schema = extend_schema(
     operation_id='get_video_download_status',
