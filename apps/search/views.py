@@ -11,26 +11,38 @@ from apps.search.serializers import (
 from apps.search.services import (
     create_project,
     create_search_request,
+    delete_project,
 )
 from apps.search.selectors import (
     get_project_by_id,
+    list_projects_for_owner,
     list_search_results_for_project,
 )
 from apps.search.schemas import (
+    project_delete_schema,
     project_create_schema,
+    project_list_schema,
     search_request_create_schema,
     search_result_list_schema,
 )
 
 
-class ProjectCreateView(APIView):
+class ProjectListCreateView(APIView):
     """
+    GET: List projects for the authenticated user
     POST: Create a new project for the authenticated user
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = ProjectSerializer
     
+    @project_list_schema
+    def get(self, request):
+        """List all projects for the authenticated user."""
+        projects = list_projects_for_owner(owner_id=request.user.id)
+        serializer = self.serializer_class(projects, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @project_create_schema
     def post(self, request):
         """Create a new project for the authenticated user."""
@@ -44,6 +56,30 @@ class ProjectCreateView(APIView):
             response_serializer = self.serializer_class(project)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProjectDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ProjectSerializer
+
+    def _get_project(self, request, project_id):
+        project = get_project_by_id(owner_id=request.user.id, project_id=project_id)
+        if not project:
+            return None, Response(
+                {"error": "Project not found or access denied."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return project, None
+
+    @project_delete_schema
+    def delete(self, request, project_id):
+        """Delete a project by ID."""
+        project, error_response = self._get_project(request, project_id)
+        if error_response:
+            return error_response
+
+        delete_project(project=project)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class SearchRequestCreateView(APIView):

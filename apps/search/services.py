@@ -34,6 +34,13 @@ def create_project(
 
 
 @transaction.atomic
+def delete_project(*, project: Project) -> None:
+    """Delete a project and cascade to related objects."""
+
+    project.delete()
+
+
+@transaction.atomic
 def create_search_request(
     *, 
     project: Project, 

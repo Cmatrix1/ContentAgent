@@ -213,6 +213,8 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Projects', 'description': 'Project management endpoints'},
         {'name': 'Search', 'description': 'Search request and result endpoints'},
         {'name': 'Content', 'description': 'Content management and video download endpoints'},
+        {'name': 'Subtitles', 'description': 'Subtitle generation and management endpoints'},
+        {'name': 'Watermarks', 'description': 'Watermark processing endpoints'},
         {'name': 'Copywriting', 'description': 'AI-powered copywriting generation endpoints'},
     ],
 }

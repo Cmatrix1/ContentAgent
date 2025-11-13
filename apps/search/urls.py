@@ -1,12 +1,18 @@
 from django.urls import path
 from apps.search.views import (
-    ProjectCreateView,
+    ProjectDeleteView,
+    ProjectListCreateView,
     SearchRequestCreateView,
     SearchResultListView,
 )
 
 urlpatterns = [
-    path("projects/", ProjectCreateView.as_view(), name="project-list-create"),
+    path("projects/", ProjectListCreateView.as_view(), name="project-list-create"),
+    path(
+        "projects/<uuid:project_id>/",
+        ProjectDeleteView.as_view(),
+        name="project-delete",
+    ),
     path(
         "projects/<uuid:project_id>/search-requests/",
         SearchRequestCreateView.as_view(),

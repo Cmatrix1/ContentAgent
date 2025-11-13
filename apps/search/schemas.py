@@ -16,6 +16,23 @@ from apps.search.serializers import (
 )
 
 
+project_list_schema = extend_schema(
+    operation_id='list_projects',
+    summary='List projects for the authenticated user',
+    description='Retrieves all projects owned by the authenticated user.',
+    tags=['Projects'],
+    responses={
+        200: OpenApiResponse(
+            response=ProjectSerializer(many=True),
+            description='Projects retrieved successfully',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+    },
+)
+
+
 project_create_schema = extend_schema(
     operation_id='create_project',
     summary='Create a new project',
@@ -78,6 +95,42 @@ project_create_schema = extend_schema(
             request_only=True,
         ),
     ],
+)
+
+
+project_delete_schema = extend_schema(
+    operation_id='delete_project',
+    summary='Delete a project',
+    description='Delete a project owned by the authenticated user.',
+    tags=['Projects'],
+    parameters=[
+        OpenApiParameter(
+            name='project_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description='UUID of the project to delete',
+            required=True,
+        ),
+    ],
+    responses={
+        204: OpenApiResponse(
+            description='Project deleted successfully',
+        ),
+        401: OpenApiResponse(
+            description='Authentication credentials were not provided or are invalid'
+        ),
+        404: OpenApiResponse(
+            description='Project not found or access denied',
+            examples=[
+                OpenApiExample(
+                    'Project Not Found',
+                    value={
+                        'error': 'Project not found or access denied.',
+                    },
+                ),
+            ],
+        ),
+    },
 )
 
 
