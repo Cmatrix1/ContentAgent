@@ -549,23 +549,24 @@ def generate_subtitle_task(self, subtitle_id: str):
 
 TRANSLATION_PROMPT_TEMPLATE = """
 🎯 **OBJECTIVE**
-Translate the following video subtitle from its original language to **{target_language}** while preserving the exact SRT format, timing, and structure.
+Translate the following video subtitles into **{target_language}**, producing a smooth, natural, and culturally appropriate version that feels as if it were originally written in {target_language} — while keeping the exact same SRT structure and timing.
 
 ---
 
 ### 🧠 ROLE
-You are a professional subtitle translator specializing in maintaining technical accuracy and cultural nuances.
+You are a professional subtitle translator and localization expert. Your goal is to create subtitles that sound authentic, natural, and emotionally accurate to native {target_language} viewers.
 
 ---
 
 ### ⚙️ CORE REQUIREMENTS
 
-#### 1. Translation Quality
-- Translate ONLY the text content to {target_language}
-- Maintain natural, fluent language that feels native
-- Preserve the meaning, tone, and context
-- Keep cultural references understandable for {target_language} speakers
-- Do NOT translate names, brands, or technical terms unless necessary
+#### 1. Natural, Native-Like Translation
+- Translate ONLY the dialogue text, not the timestamps or numbering.
+- Make the translation **sound natural and conversational**, not word-for-word.
+- Adapt idioms, tone, and phrasing to what feels native in {target_language}.
+- Preserve meaning, intent, and mood — prioritize clarity and emotional accuracy over literal structure.
+- Keep cultural references understandable for {target_language} speakers.
+- Keep names, brands, and technical terms in the original language unless translation is widely known or adds clarity.
 
 #### 2. Format Preservation
 - Keep ALL timestamps EXACTLY as they are - DO NOT modify timing
@@ -583,10 +584,11 @@ You are a professional subtitle translator specializing in maintaining technical
 - Ensure subtitles remain easy to read at original timing
 
 #### 4. Output Format
-- Return ONLY the translated SRT content
 - No markdown, code fences, or explanations
-- Ready to save directly as .srt file
-- Maintain clean formatting with proper line breaks
+- Translate for naturalness, not literal accuracy.
+- Keep meaning, emotion, and tone intact.
+- Maintain exact SRT formatting and timestamps.
+- Output should look like a professionally translated subtitle file.
 
 ---
 
@@ -725,6 +727,9 @@ def burn_subtitle_task(self, burn_task_id: str):
             # Calculate relative path
             relative_output_path = os.path.join('videos', 'subtitled', output_filename)
             
+            # Update content file path to point to the new video with burned subtitles
+            update_content_file_path(str(content.id), relative_output_path)
+            
             update_burn_task_status(
                 burn_task_id=burn_task_id,
                 status='completed',
@@ -840,6 +845,9 @@ def burn_watermark_task(self, watermark_task_id: str):
         
         # Calculate relative path
         relative_output_path = os.path.join('videos', 'watermarked', output_filename)
+        
+        # Update content file path to point to the new video with burned watermark
+        update_content_file_path(str(content.id), relative_output_path)
         
         update_watermark_task_status(
             watermark_task_id=watermark_task_id,
