@@ -16,6 +16,8 @@ def build_generate_copywriting_prompt(inputs: dict, search_results: list[dict] =
             - description: Project description
             - platform: Target platform
             - user_description: Optional user note
+            - subtitle: Optional subtitle transcript for additional context
+            - subtitle_language: Language of the subtitle transcript
         search_results: List of selected search results with title and snippet
     
     Returns:
@@ -24,6 +26,16 @@ def build_generate_copywriting_prompt(inputs: dict, search_results: list[dict] =
     user_note = ""
     if inputs.get('user_description'):
         user_note = f"- User Note: {inputs['user_description']}"
+    
+    subtitle_context = ""
+    subtitle_text = inputs.get('subtitle')
+    if subtitle_text:
+        subtitle_language = inputs.get('subtitle_language', 'original')
+        subtitle_context = (
+            f"\n\nSubtitle Transcript ({subtitle_language}) "
+            "- capture key themes and vocabulary from this transcript:\n"
+            f"{subtitle_text}"
+        )
     
     # Build search results context
     search_context = ""
@@ -39,7 +51,7 @@ Project Information:
 - Title: {inputs.get('title', 'Untitled')}
 - Description: {inputs.get('description', '')}
 - Platform: {inputs.get('platform', 'other')}
-{user_note}{search_context}
+{user_note}{subtitle_context}{search_context}
 
 Generate marketing texts in Persian for this content in JSON format with the following structure:
 {{
@@ -65,6 +77,8 @@ def build_regenerate_section_prompt(context: dict, section: str, instruction: st
         context: Dictionary containing project context:
             - title: Project title
             - description: Project description
+            - subtitle: Optional subtitle transcript for additional context
+            - subtitle_language: Language of the subtitle transcript
             - old_value: Current value of the section
         section: Section name to regenerate
         instruction: User instruction for regeneration
@@ -72,6 +86,12 @@ def build_regenerate_section_prompt(context: dict, section: str, instruction: st
     Returns:
         Formatted prompt string
     """
+    subtitle_context = ""
+    subtitle_text = context.get('subtitle')
+    if subtitle_text:
+        subtitle_language = context.get('subtitle_language', 'original')
+        subtitle_context = f"- Subtitle Transcript ({subtitle_language}):\n{subtitle_text}\n"
+    
     prompt = f"""You are rewriting one section of a marketing copy in Persian. Follow the user's instructions precisely.
 
 Existing section ({section}): {context.get('old_value', '')}
@@ -81,7 +101,7 @@ Goal: {instruction}
 Project Context:
 - Title: {context.get('title', 'Untitled')}
 - Description: {context.get('description', '')}
-
+{subtitle_context}
 Return only the new text for this section in Persian. Do not include any explanations or additional text."""
     
     return prompt

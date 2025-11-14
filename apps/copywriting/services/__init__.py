@@ -6,6 +6,7 @@ from typing import Optional
 
 from django.db import transaction
 
+from apps.content.selectors import get_project_content
 from apps.copywriting.models import CopywritingSession
 from apps.copywriting.services.ai_client import generate_copywriting, regenerate_section
 from apps.search.models import Project
@@ -38,12 +39,38 @@ def create_copywriting_session(
         'user_description': user_description or '',
     }
     
-    # Try to get platform from content if exists
-    if hasattr(project, 'content'):
-        content = project.content
+    content = get_project_content(project)
+    if content:
         inputs['platform'] = content.platform
         inputs['source_url'] = content.source_url
         inputs['content_type'] = content.content_type
+        
+        completed_subtitles = list(
+            content.subtitles.filter(status='completed').order_by('-created_at')
+        )
+        preferred_languages = ['original', 'persian', 'english']
+        selected_subtitle = next(
+            (
+                subtitle for language in preferred_languages
+                for subtitle in completed_subtitles
+                if subtitle.language == language and subtitle.subtitle_text
+            ),
+            None,
+        )
+        if not selected_subtitle:
+            selected_subtitle = next(
+                (subtitle for subtitle in completed_subtitles if subtitle.subtitle_text),
+                None,
+            )
+        
+        if selected_subtitle:
+            inputs['subtitle'] = selected_subtitle.subtitle_text
+            inputs['subtitle_language'] = selected_subtitle.language
+            logger.info(
+                "Including subtitle (%s) as context for project %s",
+                selected_subtitle.language,
+                project.id,
+            )
     
     selected_results = list_search_results_for_project(project, only_selected=True)
     search_results_data = []
@@ -130,6 +157,8 @@ def regenerate_session_section(
     context = {
         'title': session.inputs.get('title', ''),
         'description': session.inputs.get('description', ''),
+        'subtitle': session.inputs.get('subtitle', ''),
+        'subtitle_language': session.inputs.get('subtitle_language', ''),
         'old_value': old_value,
     }
     

@@ -95,6 +95,8 @@ def generate_copywriting(inputs: dict, search_results: Optional[list] = None) ->
             - description: Project description
             - platform: Target platform
             - user_description: Optional user note
+            - subtitle: Optional subtitle transcript
+            - subtitle_language: Language of the subtitle transcript
         search_results: Optional list of selected search results with title and snippet
     
     Returns:
@@ -133,6 +135,8 @@ def regenerate_section(context: dict, section: str, instruction: str) -> str:
         context: Dictionary containing project context:
             - title: Project title
             - description: Project description
+            - subtitle: Optional subtitle transcript
+            - subtitle_language: Language of the subtitle transcript
             - old_value: Current value of the section
         section: Section name to regenerate
         instruction: User instruction for regeneration
