@@ -111,7 +111,7 @@ class ContentCreateView(APIView):
             search_result=search_result
         )
 
-        response_serializer = ContentSerializer(content)
+        response_serializer = ContentSerializer(content, context={'request': request})
         return Response(
             response_serializer.data,
             status=status.HTTP_201_CREATED
@@ -142,7 +142,7 @@ class ContentDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = self.serializer_class(content)
+        serializer = self.serializer_class(content, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

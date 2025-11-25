@@ -9,6 +9,7 @@ class ContentSerializer(serializers.ModelSerializer):
     """
     download_status = serializers.SerializerMethodField()
     project_title = serializers.CharField(source='project.title', read_only=True)
+    video_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Content
@@ -21,6 +22,7 @@ class ContentSerializer(serializers.ModelSerializer):
             'platform',
             'file_path',
             'download_status',
+            'video_url',
             'created_at',
             'updated_at',
         ]
@@ -39,6 +41,27 @@ class ContentSerializer(serializers.ModelSerializer):
             }
         except VideoDownloadTask.DoesNotExist:
             return None
+    
+    @extend_schema_field(serializers.URLField(allow_null=True))
+    def get_video_url(self, obj):
+        """Get the full URL for downloading the video file."""
+        if obj.content_type == 'video' and obj.file_path:
+            request = self.context.get('request')
+            if request:
+                # Build absolute URL using MEDIA_URL
+                from django.conf import settings
+                media_url = settings.MEDIA_URL
+                # Remove leading slash from file_path if present to avoid double slashes
+                file_path = obj.file_path.lstrip('/')
+                video_url = request.build_absolute_uri(f"{media_url}{file_path}")
+                return video_url
+            # Fallback if no request context
+            from django.conf import settings
+            media_url = settings.MEDIA_URL
+            file_path = obj.file_path.lstrip('/')
+            # This won't be a full URL but at least a path
+            return f"{media_url}{file_path}"
+        return None
 
 
 class ContentCreateSerializer(serializers.Serializer):
