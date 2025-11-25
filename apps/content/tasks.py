@@ -693,7 +693,7 @@ def burn_subtitle_task(self, burn_task_id: str):
 
             force_style = (
                 "FontName=Arial,"
-                "FontSize=24,"
+                "FontSize=16,"
                 "PrimaryColour=&H00FFFFFF,"
                 "OutlineColour=&H00000000,"
                 "BorderStyle=3,"

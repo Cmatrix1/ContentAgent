@@ -290,17 +290,14 @@ def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: s
     if not source_subtitle.subtitle_text:
         raise ValueError("Source subtitle has no text to translate")
     
-    # Check if translation already exists for this language
     existing_translation = Subtitle.objects.filter(
         content=source_subtitle.content,
         language=target_language
     ).first()
     
-    # If exists and not failed, raise error
     if existing_translation and existing_translation.status != 'failed':
         raise ValueError(f"Subtitle in {target_language} already exists for this content. Delete it first if you want to retranslate.")
     
-    # If failed translation exists, reuse it for retry
     if existing_translation and existing_translation.status == 'failed':
         subtitle = existing_translation
         subtitle.status = 'generating'
@@ -309,7 +306,6 @@ def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: s
         subtitle.save(update_fields=['status', 'error_message', 'started_at'])
         logger.info(f"Retrying failed translation {subtitle.id} to {target_language}")
     else:
-        # Create new subtitle for translation
         subtitle = Subtitle.objects.create(
             content=source_subtitle.content,
             language=target_language,
@@ -319,14 +315,12 @@ def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: s
         logger.info(f"Created subtitle translation {subtitle.id} from {source_subtitle.id} to {target_language}")
     
     try:
-        # Get API key
         api_key = settings.GEMINI_API_KEY
         if not api_key:
             raise Exception("GEMINI_API_KEY not configured in settings")
         
         client = genai.Client(api_key=api_key)
         
-        # Prepare translation prompt
         from apps.content.tasks import TRANSLATION_PROMPT_TEMPLATE
         prompt = TRANSLATION_PROMPT_TEMPLATE.format(
             target_language=target_language,
@@ -335,7 +329,6 @@ def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: s
         
         logger.info(f"Calling Gemini API for subtitle translation to {target_language}")
         
-        # Call Gemini API
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[prompt]
@@ -343,7 +336,6 @@ def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: s
         
         translated_text = response.text.strip()
         
-        # Clean up any markdown formatting if present
         if translated_text.startswith('```'):
             lines = translated_text.split('\n')
             if lines[0].startswith('```'):
@@ -352,7 +344,6 @@ def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: s
                 lines = lines[:-1]
             translated_text = '\n'.join(lines)
         
-        # Update subtitle with translation
         subtitle.subtitle_text = translated_text
         subtitle.status = 'completed'
         subtitle.completed_at = timezone.now()
@@ -363,7 +354,6 @@ def translate_subtitle_synchronous(source_subtitle: Subtitle, target_language: s
         return subtitle
         
     except Exception as e:
-        # Mark as failed
         subtitle.status = 'failed'
         subtitle.error_message = str(e)
         subtitle.completed_at = timezone.now()
